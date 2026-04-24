@@ -49,11 +49,12 @@
 - (BOOL)handleContentSizeIfNeeded;
 - (void)handleContentSize;
 - (void)setContentOffset_:(id)value withObject:(id)property;
+- (void)setContentInsets_:(id)value withObject:(id)property;
 - (void)setZoomScale_:(id)value withObject:(id)property;
 #ifndef TI_USE_AUTOLAYOUT
 - (UIView *)wrapperView;
 #endif
-- (void)scrollToBottom;
+- (void)scrollToBottom:(id)options;
 - (void)scrollToTop;
 
 @end

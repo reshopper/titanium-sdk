@@ -32,6 +32,7 @@
 {
   if (self = [super init]) {
     padding = CGRectZero;
+    textPadding = UIEdgeInsetsZero;
     initialLabelFrame = CGRectZero;
     verticalAlign = UIControlContentVerticalAlignmentFill;
   }
@@ -81,14 +82,24 @@
      have at least enough space to display one word. On the other hand font measurement is unsuitable for
      attributed strings till we move to the new measurement API. Hence take both and return MAX.
      */
-  CGFloat sizeThatFitsResult = [[self label] sizeThatFits:CGSizeMake(suggestedWidth, 0)].width;
-  CGFloat fontMeasurementResult = [self sizeForFont:suggestedWidth].width;
-  return (MAX(sizeThatFitsResult, fontMeasurementResult));
+  CGFloat horizontalPadding = textPadding.left + textPadding.right;
+  CGFloat adjustedWidth = suggestedWidth - horizontalPadding;
+  if (adjustedWidth < 0) {
+    adjustedWidth = 0;
+  }
+  CGFloat sizeThatFitsResult = [[self label] sizeThatFits:CGSizeMake(adjustedWidth, 0)].width;
+  CGFloat fontMeasurementResult = [self sizeForFont:adjustedWidth].width;
+  return (MAX(sizeThatFitsResult, fontMeasurementResult)) + horizontalPadding;
 }
 
 - (CGFloat)contentHeightForWidth:(CGFloat)width
 {
-  return [[self label] sizeThatFits:CGSizeMake(width, 0)].height;
+  CGFloat horizontalPadding = textPadding.left + textPadding.right;
+  CGFloat adjustedWidth = width - horizontalPadding;
+  if (adjustedWidth < 0) {
+    adjustedWidth = 0;
+  }
+  return [[self label] sizeThatFits:CGSizeMake(adjustedWidth, 0)].height + textPadding.top + textPadding.bottom;
 }
 
 - (void)padLabel
@@ -163,8 +174,9 @@
 - (void)frameSizeChanged:(CGRect)frame bounds:(CGRect)bounds
 {
 #ifndef TI_USE_AUTOLAYOUT
-  initialLabelFrame = bounds;
-  [wrapperView setFrame:initialLabelFrame];
+  CGRect paddedBounds = UIEdgeInsetsInsetRect(bounds, textPadding);
+  initialLabelFrame = CGRectMake(0, 0, paddedBounds.size.width, paddedBounds.size.height);
+  [wrapperView setFrame:paddedBounds];
 #endif
   [self padLabel];
   [super frameSizeChanged:frame bounds:bounds];
@@ -497,13 +509,11 @@
 - (void)setAttributedString_:(id)arg
 {
 #ifdef USE_TI_UIATTRIBUTEDSTRING
-  TiUIAttributedStringProxy *attributedStringProxy = [TiUIAttributedStringProxy fromProperties:arg];
-  if (attributedStringProxy) {
-    [[self proxy] replaceValue:attributedStringProxy forKey:@"attributedString" notification:NO];
-    [[self label] setAttributedText:[attributedStringProxy attributedString]];
-    [self padLabel];
-    [(TiViewProxy *)[self proxy] contentsWillChange];
-  }
+  ENSURE_SINGLE_ARG(arg, TiUIAttributedStringProxy);
+  [[self proxy] replaceValue:arg forKey:@"attributedString" notification:NO];
+  [[self label] setAttributedText:[arg attributedString]];
+  [self padLabel];
+  [(TiViewProxy *)[self proxy] contentsWillChange];
 #endif
 }
 
@@ -557,6 +567,17 @@
 {
   padding.size.height = [TiUtils floatValue:bottom];
   [self updateBackgroundImageFrameWithPadding];
+}
+
+- (void)setPadding_:(id)args
+{
+  ENSURE_TYPE(args, NSDictionary);
+  textPadding = [TiUtils contentInsets:args];
+
+  if (label != nil) {
+    [self frameSizeChanged:[self frame] bounds:[self bounds]];
+    [(TiViewProxy *)[self proxy] contentsWillChange];
+  }
 }
 
 - (void)setTextAlign_:(id)alignment

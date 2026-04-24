@@ -557,6 +557,7 @@ public class TabGroupProxy extends TiWindowProxy implements TiActivityWindow
 	public void onWindowActivityCreated()
 	{
 		// Flag that this tab group has been opened.
+		clearWillCloseFiredFlag();
 		opened = true;
 		opening = false;
 

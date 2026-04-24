@@ -697,6 +697,34 @@ public class AndroidModule extends KrollModule
 						permissions.add((String) permission);
 					}
 				}
+				final Context context = TiApplication.getInstance();
+				Activity currentActivity = TiApplication.getInstance().getCurrentActivity();
+				List<String> filteredPermissions = new ArrayList<String>();
+				for (String permission : permissions) {
+					if (context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+						continue;
+					}
+					filteredPermissions.add(permission);
+				}
+				if (filteredPermissions.size() > 0) {
+					// Ensure we have a valid Activity to perform the permission request on.
+					boolean isActivityInvalid = (currentActivity == null)
+						|| currentActivity.isFinishing()
+						|| (Build.VERSION.SDK_INT >= 17 && currentActivity.isDestroyed());
+					if (isActivityInvalid) {
+						KrollDict error = new KrollDict();
+						error.putCodeAndMessage(-1, "No active Activity to request permissions");
+						if (permissionCallback != null) {
+							permissionCallback.callAsync(callbackThisObject, error);
+						}
+						promise.reject(error);
+						return;
+					}
+					TiBaseActivity.registerPermissionRequestCallback(REQUEST_CODE, permissionCallback,
+						callbackThisObject, promise);
+					currentActivity.requestPermissions(filteredPermissions.toArray(new String[0]), REQUEST_CODE);
+					return;
+				}
 			}
 			Activity currentActivity = TiApplication.getInstance().getCurrentActivity();
 			List<String> filteredPermissions = new ArrayList<String>();

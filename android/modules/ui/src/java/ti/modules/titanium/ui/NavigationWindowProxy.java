@@ -7,15 +7,16 @@
 package ti.modules.titanium.ui;
 
 import org.appcelerator.kroll.KrollDict;
+import org.appcelerator.kroll.KrollEventCallback;
 import org.appcelerator.kroll.KrollPromise;
 import org.appcelerator.kroll.annotations.Kroll;
 import org.appcelerator.titanium.TiC;
 import org.appcelerator.titanium.proxy.TiWindowProxy;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-
-import androidx.annotation.NonNull;
+import java.util.Map;
 
 @Kroll.proxy(creatableInModule = UIModule.class)
 public class NavigationWindowProxy extends WindowProxy
@@ -23,54 +24,82 @@ public class NavigationWindowProxy extends WindowProxy
 	private static final String TAG = "NavigationWindowProxy";
 
 	private final List<TiWindowProxy> windows = new ArrayList<>();
+	private final Map<TiWindowProxy, Integer> closeListenerIds = new HashMap<>();
 
 	public NavigationWindowProxy()
 	{
 		super();
 	}
 
+	@Kroll.getProperty
+	public TiWindowProxy[] getWindows()
+	{
+		return windows.toArray(new TiWindowProxy[0]);
+	}
+
 	@Override
 	@Kroll.method
 	public KrollPromise<Void> open(@Kroll.argument(optional = true) Object arg)
 	{
-		// FIXME: Shouldn't this complain/blow up if window isn't specified?
-		if (!opened && getProperties().containsKeyAndNotNull(TiC.PROPERTY_WINDOW)) {
-			opened = true;
-			Object rootView = getProperties().get(TiC.PROPERTY_WINDOW);
-			if (rootView instanceof WindowProxy || rootView instanceof TabGroupProxy) {
-				openWindow(rootView, arg);
-				fireEvent(TiC.EVENT_OPEN, null);
-			}
+		if (opened) {
 			return KrollPromise.create((promise) -> {
 				promise.resolve(null);
 			});
 		}
-		return super.open(arg);
+
+		clearWillCloseFiredFlag();
+		opened = true;
+
+		if (getProperties().containsKeyAndNotNull(TiC.PROPERTY_WINDOW)) {
+			Object rootView = getProperties().get(TiC.PROPERTY_WINDOW);
+			if (rootView instanceof WindowProxy || rootView instanceof TabGroupProxy) {
+				openWindow(rootView, arg);
+			}
+		}
+
+		fireEvent(TiC.EVENT_OPEN, null);
+		return KrollPromise.create((promise) -> {
+			promise.resolve(null);
+		});
+	}
+
+	@SuppressWarnings("unchecked")
+	@Override
+	@Kroll.method
+	public KrollPromise<Void> close(@Kroll.argument(optional = true) Object arg)
+	{
+		if (!opened) {
+			return KrollPromise.create((promise) -> {
+				promise.resolve(null);
+			});
+		}
+
+		return KrollPromise.create((promise) -> {
+			KrollDict options;
+			if (arg instanceof HashMap<?, ?>) {
+				options = new KrollDict((HashMap<String, Object>) arg);
+			} else {
+				options = new KrollDict();
+			}
+
+			opened = false;
+			popToRootWindow(options);
+			if (!windows.isEmpty()) {
+				TiWindowProxy rootWindow = windows.get(0);
+				rootWindow.close(options);
+			}
+			fireEvent(TiC.EVENT_CLOSE, null);
+			promise.resolve(null);
+		});
 	}
 
 	@Kroll.method
 	public void popToRootWindow(@Kroll.argument(optional = true) Object arg)
 	{
-		// Keep first "root" window
 		for (int i = windows.size() - 1; i > 0; i--) {
 			TiWindowProxy window = windows.get(i);
-			closeWindow(window, arg);
+			window.close(arg);
 		}
-	}
-
-	protected void handleClose(@NonNull KrollDict options)
-	{
-		if (opened) {
-			opened = false;
-			popToRootWindow(options);
-			closeWindow(windows.get(0), options); // close the root window
-			fireEvent(TiC.EVENT_CLOSE, null);
-			if (closePromise != null) {
-				closePromise.resolve(null);
-				closePromise = null;
-			}
-		}
-		super.handleClose(options);
 	}
 
 	@Kroll.method
@@ -80,17 +109,26 @@ public class NavigationWindowProxy extends WindowProxy
 			open(null);
 		}
 
-		// Guard for types different from Window and TabGroup
 		if (!(childToOpen instanceof TiWindowProxy)) {
 			return;
 		}
-		windows.add(((TiWindowProxy) childToOpen));
-		((TiWindowProxy) childToOpen).setNavigationWindow(this);
+
+		TiWindowProxy child = (TiWindowProxy) childToOpen;
+		windows.add(child);
+		child.setNavigationWindow(this);
+
+		int listenerId = child.addEventListener(TiC.EVENT_CLOSE, new KrollEventCallback() {
+			@Override
+			public void call(Object data)
+			{
+				removeWindowFromStack(child);
+			}
+		});
+		closeListenerIds.put(child, listenerId);
+
 		if (childToOpen instanceof WindowProxy) {
 			((WindowProxy) childToOpen).open(arg);
 		} else if (childToOpen instanceof TabGroupProxy) {
-			// tabgroup.js deals with passing the tabs from the creation dictionary to the native setTabs method.
-			// In this case we need to do it manually since the JS "open()" does not get called.
 			((TabGroupProxy) childToOpen).callPropertySync(TiC.PROPERTY_OPEN, new Object[] { arg });
 		}
 	}
@@ -98,18 +136,24 @@ public class NavigationWindowProxy extends WindowProxy
 	@Kroll.method
 	public void closeWindow(Object childToClose, @Kroll.argument(optional = true) Object arg)
 	{
-		// TODO: If they try to close root window, yell at them:
-		// DebugLog(@"[ERROR] Can not close the root window of the NavigationWindow. Close the NavigationWindow instead.");
-
-		// Guard for types different from Window and TabGroup
 		if (!(childToClose instanceof TiWindowProxy)) {
 			return;
 		}
 
 		TiWindowProxy window = (TiWindowProxy) childToClose;
-		windows.remove(window);
-		window.setNavigationWindow(null);
 		window.close(arg);
+	}
+
+	private void removeWindowFromStack(TiWindowProxy window)
+	{
+		windows.remove(window);
+		Integer listenerId = closeListenerIds.remove(window);
+		if (listenerId != null) {
+			window.removeEventListener(TiC.EVENT_CLOSE, listenerId);
+		}
+		if (window.getNavigationWindow() == this) {
+			window.setNavigationWindow(null);
+		}
 	}
 
 	@Override

@@ -28,6 +28,7 @@ public class TiActivityWindowProxy extends TiWindowProxy
 
 		// force to true since the window is actually opened from TiUIActivityWindow
 		// TODO make this lifecycle less weird
+		clearWillCloseFiredFlag();
 		opened = true;
 	}
 

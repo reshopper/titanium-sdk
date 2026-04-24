@@ -9,7 +9,6 @@ package ti.modules.titanium.ui;
 import android.app.Activity;
 import android.os.Message;
 
-import org.appcelerator.kroll.common.Log;
 import org.appcelerator.kroll.KrollDict;
 import org.appcelerator.kroll.annotations.Kroll;
 import org.appcelerator.titanium.TiC;
@@ -29,8 +28,7 @@ import ti.modules.titanium.ui.widget.TiUIScrollableView;
 		TiC.PROPERTY_CLIP_VIEWS,
 		TiC.PROPERTY_PADDING,
 		TiC.PROPERTY_SHOW_PAGING_CONTROL,
-		TiC.PROPERTY_OVER_SCROLL_MODE,
-		TiC.PROPERTY_SCROLL_TYPE
+		TiC.PROPERTY_OVER_SCROLL_MODE
 	})
 public class ScrollableViewProxy extends TiViewProxy
 {
@@ -310,9 +308,8 @@ public class ScrollableViewProxy extends TiViewProxy
 			options.put("currentPage", currentPage);
 			fireEvent(TiC.EVENT_DRAGEND, options);
 		}
-
+		// TODO: Deprecate old event
 		if (hasListeners("dragEnd")) {
-			Log.w(TAG, "dragEnd is deprecated.  Use " + TiC.EVENT_DRAGEND + " instead.");
 			KrollDict options = new KrollDict();
 			options.put("view", currentView);
 			options.put("currentPage", currentPage);
@@ -328,9 +325,8 @@ public class ScrollableViewProxy extends TiViewProxy
 			options.put("currentPage", currentPage);
 			fireEvent(TiC.EVENT_SCROLLEND, options);
 		}
-
+		// TODO: Deprecate old event
 		if (hasListeners("scrollEnd")) {
-			Log.w(TAG, "scrollEnd is deprecated.  Use " + TiC.EVENT_SCROLLEND + " instead.");
 			KrollDict options = new KrollDict();
 			options.put("view", currentView);
 			options.put("currentPage", currentPage);

@@ -49,6 +49,7 @@ jclass JNIUtil::stackTraceElementClass = NULL;
 jclass JNIUtil::v8PromiseClass = NULL;
 jclass JNIUtil::v8ObjectClass = NULL;
 jclass JNIUtil::v8FunctionClass = NULL;
+jclass JNIUtil::v8RuntimeClass = NULL;
 jclass JNIUtil::krollRuntimeClass = NULL;
 jclass JNIUtil::krollInvocationClass = NULL;
 jclass JNIUtil::krollExceptionClass = NULL;
@@ -121,6 +122,8 @@ jmethodID JNIUtil::krollLoggingLogWithDefaultLoggerMethod = NULL;
 jmethodID JNIUtil::krollRuntimeDispatchExceptionMethod = NULL;
 
 jmethodID JNIUtil::getJSPropertiesMethod = NULL;
+
+jmethodID JNIUtil::v8RuntimeFireUnhandledRejectionMethod = NULL;
 
 JNIEnv* JNIScope::current = NULL;
 
@@ -336,7 +339,8 @@ void JNIUtil::initCache()
 	v8PromiseClass = findClass("org/appcelerator/kroll/runtime/v8/V8Promise");
 	v8ObjectClass = findClass("org/appcelerator/kroll/runtime/v8/V8Object");
 	v8FunctionClass = findClass("org/appcelerator/kroll/runtime/v8/V8Function");
-	krollRuntimeClass = findClass("org/appcelerator/kroll/KrollRuntime");
+	v8RuntimeClass = findClass("org/appcelerator/kroll/runtime/v8/V8Runtime");
+	krollRuntimeClass = findClass("org/appcelerator/kroll/runtime/v8/V8Runtime");
 	krollInvocationClass = findClass("org/appcelerator/kroll/KrollInvocation");
 	krollObjectClass = findClass("org/appcelerator/kroll/KrollObject");
 	krollProxyClass = findClass("org/appcelerator/kroll/KrollProxy");
@@ -392,6 +396,8 @@ void JNIUtil::initCache()
 	referenceTableGetReferenceMethod = getMethodID(referenceTableClass, "getReference", "(J)Ljava/lang/Object;", true);
 	referenceTableIsStrongReferenceMethod = getMethodID(referenceTableClass, "isStrongReference", "(J)Z", true);
 
+	v8RuntimeFireUnhandledRejectionMethod = getMethodID(v8RuntimeClass, "fireUnhandledRejection", "(Ljava/lang/String;)V", true);
+
 	jfieldID dontInterceptField = env->GetStaticFieldID(krollRuntimeClass, "DONT_INTERCEPT", "I");
 	krollRuntimeDontIntercept = env->GetStaticIntField(krollRuntimeClass, dontInterceptField);
 
@@ -421,6 +427,11 @@ void JNIUtil::initCache()
 
 	jfieldID undefinedObjectField = env->GetStaticFieldID(krollRuntimeClass, "UNDEFINED", "Ljava/lang/Object;");
 	undefinedObject = env->NewGlobalRef(env->GetStaticObjectField(krollRuntimeClass, undefinedObjectField));
+}
+
+void JNIUtil::dispose()
+{
+	// ... existing code ...
 }
 
 } // namespace titanium

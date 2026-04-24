@@ -43,6 +43,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
+import java.util.zip.InflaterInputStream;
+
+import org.brotli.dec.BrotliInputStream;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.KeyManager;
@@ -98,8 +101,6 @@ public class TiHTTPClient
 	// Regular expressions for detecting charset information in response documents (ex: html, xml).
 	private static final String HTML_META_TAG_REGEX = "charset=([^\"\']*)";
 	private static final String XML_DECLARATION_TAG_REGEX = "encoding=[\"\']([^\"\']*)[\"\']";
-	private static final Pattern HTML_META_TAG_PATTERN = Pattern.compile(HTML_META_TAG_REGEX);
-	private static final Pattern XML_DECLARATION_TAG_PATTERN = Pattern.compile(XML_DECLARATION_TAG_REGEX);
 
 	private static AtomicInteger httpClientThreadCounter;
 	private HttpURLConnection client;
@@ -204,7 +205,9 @@ public class TiHTTPClient
 				redirectedLocation = currentLocation.toString();
 			}
 
-			contentEncoding = connection.getContentEncoding();
+			// Get Content-Encoding from response headers instead of connection.getContentEncoding()
+			// because getContentEncoding() may return null for encodings Android doesn't recognize (like brotli)
+			contentEncoding = connection.getHeaderField("Content-Encoding");
 
 			contentType = connection.getContentType();
 
@@ -223,6 +226,8 @@ public class TiHTTPClient
 			if (charset.isEmpty()) {
 				charset = "UTF-8";
 			}
+			// Persist detected/default charset to avoid fallback detection (and noisy logs)
+			this.charset = charset;
 			responseData = null;
 			responseText = null;
 
@@ -239,19 +244,23 @@ public class TiHTTPClient
 
 			// Guard for null stream response from the server
 			if (in != null) {
+				// Decompress response based on Content-Encoding header
 				if ("gzip".equalsIgnoreCase(contentEncoding)) {
 					in = new GZIPInputStream(in);
+				} else if ("deflate".equalsIgnoreCase(contentEncoding)) {
+					in = new InflaterInputStream(in);
+				} else if ("br".equalsIgnoreCase(contentEncoding)) {
+					in = new BrotliInputStream(in);
 				}
 				is = new BufferedInputStream(in);
 			}
 
 			if (is != null) {
-				Log.d(TAG, "Content length: " + contentLength, Log.DEBUG_MODE);
+				
 				int count = 0;
 				long totalSize = 0;
 				byte[] buf = new byte[8192];
-				Log.d(TAG, "Available: " + is.available(), Log.DEBUG_MODE);
-
+			
 				while ((count = is.read(buf)) != -1) {
 					if (aborted) {
 						break;
@@ -542,16 +551,16 @@ public class TiHTTPClient
 	 */
 	private String detectResponseDataEncoding()
 	{
-		Pattern pattern;
+		String regex;
 		if (contentType == null) {
 			Log.w(TAG, "Could not detect charset, no content type specified.", Log.DEBUG_MODE);
 			return null;
 
 		} else if (contentType.contains("xml")) {
-			pattern = XML_DECLARATION_TAG_PATTERN;
+			regex = XML_DECLARATION_TAG_REGEX;
 
 		} else if (contentType.contains("html")) {
-			pattern = HTML_META_TAG_PATTERN;
+			regex = HTML_META_TAG_REGEX;
 
 		} else {
 			Log.w(TAG, "Cannot detect charset, unknown content type: " + contentType, Log.DEBUG_MODE);
@@ -565,6 +574,7 @@ public class TiHTTPClient
 			responseSequence = responseOut.toString();
 		}
 		if (responseSequence != null) {
+			Pattern pattern = Pattern.compile(regex);
 			Matcher matcher = pattern.matcher(responseSequence);
 			if (matcher.find()) {
 				return matcher.group(1);
@@ -577,6 +587,13 @@ public class TiHTTPClient
 	{
 		// If we've already transcoded the response text below, then return it now.
 		if (this.responseText != null) {
+			return this.responseText;
+		}
+
+		// If no body was received at all (empty response), return empty string without error logging.
+		// Common for 204/304 or endpoints that deliberately return empty content.
+		if (this.responseData == null && this.responseOut == null) {
+			this.responseText = "";
 			return this.responseText;
 		}
 
@@ -611,10 +628,13 @@ public class TiHTTPClient
 			}
 		}
 
-		// Log an error if we've failed to transcode the response above.
+		// Log an error if we've failed to transcode the response above and there was supposed to be a body.
 		if (text == null) {
-			Log.e(TAG, "Could not decode response text.");
+			// If nothing indicates a body, do not log an error; otherwise log.
 			text = "";
+			if (this.responseOut instanceof ByteArrayOutputStream || this.responseData != null) {
+				Log.e(TAG, "Could not decode response text.");
+			}
 		}
 
 		// Store the response text for quick access later, but only if we've finished receiving the response.
@@ -734,6 +754,23 @@ public class TiHTTPClient
 				for (String value : headerValues) {
 					sb.append(value).append("\n");
 				}
+			}
+			result = sb.toString();
+		}
+		return result;
+	}
+
+	public String getAllRequestHeaders()
+	{
+		String result = "";
+		if (requestHeaders != null && !requestHeaders.isEmpty()) {
+			StringBuilder sb = new StringBuilder(256);
+			Set<Map.Entry<String, String>> entrySet = requestHeaders.entrySet();
+
+			for (Map.Entry<String, String> entry : entrySet) {
+				String headerName = entry.getKey();
+				String headerValue = entry.getValue();
+				sb.append(headerName).append(":").append(headerValue).append("\n");
 			}
 			result = sb.toString();
 		}
@@ -944,6 +981,10 @@ public class TiHTTPClient
 		if ((username != null) && (password != null)) {
 			hasAuthentication = true;
 		}
+
+		// Clear request headers to match iOS behavior and XMLHttpRequest specification
+		// This ensures that calling open() resets the request state, including headers
+		requestHeaders.clear();
 
 		setReadyState(READY_STATE_OPENED);
 		setRequestHeader("User-Agent", TITANIUM_USER_AGENT);
@@ -1471,8 +1512,10 @@ public class TiHTTPClient
 					Base64.encodeToString((username + ":" + password).getBytes(), Base64.NO_WRAP);
 				client.setRequestProperty("Authorization", "Basic " + encodedCredentials);
 			}
-			// This is to set gzip default to disable
+			// Set default to no compression to avoid issues with transparent decompression.
 			// https://code.google.com/p/android/issues/detail?id=174949
+			// Users can opt-in to compression by setting "Accept-Encoding" header manually.
+			// Supported encodings: gzip, deflate, br (brotli)
 			client.setRequestProperty("Accept-Encoding", "identity");
 			if (parts.size() > 0 && needMultipart) {
 				boundary = HttpUrlConnectionUtils.generateBoundary();

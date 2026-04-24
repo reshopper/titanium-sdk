@@ -111,7 +111,7 @@
       [TiHost resourceBasedURL:asString baseURL:&base];
       baseURL = [[NSURL fileURLWithPath:base] retain];
     }
-    _listenerQueue = dispatch_queue_create("ti.objcproxy.listeners", DISPATCH_QUEUE_CONCURRENT);
+    pthread_rwlock_init(&_listenerLock, NULL);
     [self _configure];
   }
   return self;
@@ -161,8 +161,9 @@
 
 - (void)addEventListener:(NSString *)name withCallback:(JSValue *)callback
 {
-  __block NSUInteger ourCallbackCount = 0;
-  dispatch_barrier_sync(_listenerQueue, ^{
+  pthread_rwlock_wrlock(&_listenerLock);
+  NSUInteger ourCallbackCount = 0;
+  @try {
     if (_listeners == nil) {
       _listeners = [[NSMutableDictionary alloc] initWithCapacity:3];
     }
@@ -175,15 +176,19 @@
     [listenersForType addObject:callback];
     ourCallbackCount = [listenersForType count];
     [_listeners setObject:listenersForType forKey:name];
-  });
-  [self _listenerAdded:name count:(int)ourCallbackCount];
+  }
+  @finally {
+    pthread_rwlock_unlock(&_listenerLock);
+    [self _listenerAdded:name count:(int)ourCallbackCount];
+  }
 }
 
 - (void)removeEventListener:(NSString *)name withCallback:(JSValue *)callback
 {
-  __block NSUInteger ourCallbackCount = 0;
-  __block BOOL removed = false;
-  dispatch_barrier_sync(_listenerQueue, ^{
+  pthread_rwlock_wrlock(&_listenerLock);
+  NSUInteger ourCallbackCount = 0;
+  BOOL removed = false;
+  @try {
     if (_listeners == nil) {
       return;
     }
@@ -204,26 +209,31 @@
         break;
       }
     }
-  });
-  if (removed) {
-    [self _listenerRemoved:name count:(int)ourCallbackCount];
+  }
+  @finally {
+    pthread_rwlock_unlock(&_listenerLock);
+    if (removed) {
+      [self _listenerRemoved:name count:(int)ourCallbackCount];
+    }
   }
 }
 
 - (BOOL)_hasListeners:(NSString *)type
 {
-  __block BOOL result = NO;
-  dispatch_sync(_listenerQueue, ^{
+  pthread_rwlock_rdlock(&_listenerLock);
+  @try {
     if (_listeners == nil) {
-      return;
+      return NO;
     }
     NSMutableArray *listenersForType = (NSMutableArray *)[_listeners objectForKey:type];
     if (listenersForType == nil) {
-      return;
+      return NO;
     }
-    result = [listenersForType count] > 0;
-  });
-  return result;
+    return [listenersForType count] > 0;
+  }
+  @finally {
+    pthread_rwlock_unlock(&_listenerLock);
+  }
 }
 
 - (void)_listenerAdded:(NSString *)type count:(int)count
@@ -238,21 +248,26 @@
 
 - (void)fireEvent:(NSString *)name withDict:(NSDictionary *)dict
 {
-  __block NSArray *listenersForType = nil;
-  dispatch_sync(_listenerQueue, ^{
+  pthread_rwlock_rdlock(&_listenerLock);
+  @try {
     if (_listeners == nil) {
+      pthread_rwlock_unlock(&_listenerLock);
       return;
     }
-    listenersForType = [[_listeners objectForKey:name] copy];
-  });
-  if (listenersForType == nil) {
-    return;
+    NSArray *listenersForType = [[_listeners objectForKey:name] copy];
+    pthread_rwlock_unlock(&_listenerLock);
+
+    if (listenersForType == nil) {
+      return;
+    }
+    // FIXME: looks like we need to handle bubble logic/etc. See other fireEvent impl
+    for (JSValue *storedCallback in listenersForType) {
+      [self _fireEventToListener:name withObject:dict listener:storedCallback];
+    }
+    [listenersForType autorelease];
   }
-  // FIXME: looks like we need to handle bubble logic/etc. See other fireEvent impl
-  for (JSValue *storedCallback in listenersForType) {
-    [self _fireEventToListener:name withObject:dict listener:storedCallback];
+  @finally {
   }
-  [listenersForType autorelease];
 }
 
 - (void)_fireEventToListener:(NSString *)type withObject:(id)obj listener:(JSValue *)listener
@@ -295,17 +310,17 @@ READWRITE_IMPL(BOOL, bubbleParent, BubbleParent);
 - (void)dealloc
 {
   [self _destroy];
-  dispatch_release(_listenerQueue);
+  pthread_rwlock_destroy(&_listenerLock);
   [super dealloc];
 }
 
 - (void)_destroy
 {
   // remove all listeners JS side proxy
-  dispatch_barrier_sync(_listenerQueue, ^{
-    // releasing JSManagedValues should clean up the wrapped JSValue*
-    RELEASE_TO_NIL(_listeners);
-  });
+  pthread_rwlock_wrlock(&_listenerLock);
+  // releasing JSManagedValues should clean up the wrapped JSValue*
+  RELEASE_TO_NIL(_listeners);
+  pthread_rwlock_unlock(&_listenerLock);
 
   RELEASE_TO_NIL(baseURL);
 }

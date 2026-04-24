@@ -18,6 +18,9 @@
   BOOL transitionWithGesture;
 
   UIPanGestureRecognizer *fullWidthBackGestureRecognizer;
+
+  // Array to hold inserted windows (since TiViewController doesn't retain its proxy)
+  NSMutableArray *insertedWindows;
 }
 
 // Private API

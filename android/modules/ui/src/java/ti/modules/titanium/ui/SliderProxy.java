@@ -22,12 +22,15 @@ import ti.modules.titanium.ui.widget.TiUISlider;
 		"minRange",
 		"maxRange",
 		"thumbImage",
+		"thumbSize",
 		TiC.PROPERTY_SPLIT_TRACK,
 		"leftTrackImage",
 		"rightTrackImage",
 		TiC.PROPERTY_TINT_COLOR,
 		TiC.PROPERTY_TRACK_TINT_COLOR,
-		TiC.PROPERTY_VALUE
+		TiC.PROPERTY_VALUE,
+		"steps",
+		"stepValues"
 	})
 public class SliderProxy extends TiViewProxy
 {

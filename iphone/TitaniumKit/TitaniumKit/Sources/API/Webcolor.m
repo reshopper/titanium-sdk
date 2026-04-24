@@ -248,7 +248,63 @@ int toASCIIHexValue(unichar c) { return (c & 0xF) + (c < 'A' ? 0 : 9); }
   float alpha = 1.0;
   if ((length != 3) && (length != 4) && (length != 6) && (length != 7) && (length != 8)) {
     if ([hexCode rangeOfString:@"rgb"].location == NSNotFound) {
-      DebugLog(@"[WARN] Hex color passed looks invalid: %@", hexCode);
+      // Enhanced logging to provide more context about invalid hex colors
+      NSString *callerInfo = @"Unknown caller";
+      NSString *elementId = @"N/A";
+      NSString *additionalInfo = @"";
+
+      // Try to get some context from the call stack
+      NSArray *callStack = [NSThread callStackSymbols];
+      if ([callStack count] > 1) {
+        // Look for Titanium-related frames in the call stack
+        for (NSString *frame in callStack) {
+          if ([frame containsString:@"Ti"] || [frame containsString:@"Kroll"] ||
+              [frame containsString:@"setColor"] || [frame containsString:@"setBackground"]) {
+            // Extract just the method name part for cleaner logging
+            NSRange methodRange = [frame rangeOfString:@"-["];
+            if (methodRange.location != NSNotFound) {
+              NSString *methodPart = [frame substringFromIndex:methodRange.location];
+              NSRange endRange = [methodPart rangeOfString:@"]"];
+              if (endRange.location != NSNotFound) {
+                callerInfo = [methodPart substringToIndex:endRange.location + 1];
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Try to get additional context by looking for current proxy in the call stack
+      // This is a best-effort attempt to find element information
+      @try {
+        // Look through the call stack for any TiProxy objects that might have ID or other identifying info
+        // Note: This is experimental and may not always work
+        NSArray *addresses = [NSThread callStackReturnAddresses];
+        if ([addresses count] > 2) {
+          // Try to find if we're being called from a proxy method
+          // This is a heuristic approach and may not always succeed
+          for (int i = 1; i < MIN([addresses count], 5); i++) {
+            @try {
+              // This is an experimental approach to get proxy context
+              // We'll keep it simple to avoid crashes
+              break; // For now, just break to avoid potential issues
+            } @catch (NSException *e) {
+              // Ignore any exceptions from this experimental code
+              break;
+            }
+          }
+        }
+      } @catch (NSException *e) {
+        // Ignore any exceptions from context detection
+      }
+
+      if (![elementId isEqualToString:@"N/A"] || ![additionalInfo isEqualToString:@""]) {
+        DebugLog(@"[WARN] Invalid hex color '%@' (length: %lu) used in %@ (id: %@%@). Expected format: #RGB, #RGBA, #RRGGBB, #RRGGBBAA",
+            hexCode, (unsigned long)length, callerInfo, elementId, additionalInfo);
+      } else {
+        DebugLog(@"[WARN] Invalid hex color '%@' (length: %lu) used in %@. Expected format: #RGB, #RGBA, #RRGGBB, #RRGGBBAA",
+            hexCode, (unsigned long)length, callerInfo);
+      }
     }
     return nil;
   }

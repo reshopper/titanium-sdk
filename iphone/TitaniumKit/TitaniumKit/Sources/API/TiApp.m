@@ -759,7 +759,8 @@ TI_INLINE void waitForMemoryPanicCleared(void); // WARNING: This must never be r
 {
   if (pendingCompletionHandlers != nil) {
     for (NSString *key in [pendingCompletionHandlers allKeys]) {
-      [self performCompletionHandlerWithKey:key andResult:UIBackgroundFetchResultFailed];
+      // Do not remove from the pending handlers for now, as it's removed after the enumeration finished
+      [self performCompletionHandlerWithKey:key andResult:UIBackgroundFetchResultFailed removeAfterExecution:NO];
     }
   }
   RELEASE_TO_NIL(pendingCompletionHandlers);
@@ -771,17 +772,19 @@ TI_INLINE void waitForMemoryPanicCleared(void); // WARNING: This must never be r
   NSString *key = (NSString *)timer.userInfo;
   if ([pendingCompletionHandlers objectForKey:key]) {
     // Send an event notifying the developer that the background-fetch failed
-    [self performCompletionHandlerWithKey:key andResult:UIBackgroundFetchResultFailed];
+    [self performCompletionHandlerWithKey:key andResult:UIBackgroundFetchResultFailed removeAfterExecution:YES];
   }
 }
 
 // Gets called when user ends finishes with backgrounding stuff. By default this would always be called with UIBackgroundFetchResultNoData.
-- (void)performCompletionHandlerWithKey:(NSString *)key andResult:(UIBackgroundFetchResult)result
+- (void)performCompletionHandlerWithKey:(NSString *)key andResult:(UIBackgroundFetchResult)result removeAfterExecution:(BOOL)removeAfterExecution
 {
-  void (^completionHandler)(UIBackgroundFetchResult) = [pendingCompletionHandlers objectForKey:key];
-  if (completionHandler != nil) {
-    [pendingCompletionHandlers removeObjectForKey:key];
+  if ([pendingCompletionHandlers objectForKey:key]) {
+    void (^completionHandler)(UIBackgroundFetchResult) = [pendingCompletionHandlers objectForKey:key];
     completionHandler(result);
+    if (removeAfterExecution) {
+      [pendingCompletionHandlers removeObjectForKey:key];
+    }
   } else {
     DebugLog(@"[ERROR] The specified completion handler with ID = %@ has already expired or been removed from the system", key);
   }
@@ -1124,14 +1127,21 @@ TI_INLINE void waitForMemoryPanicCleared(void); // WARNING: This must never be r
 // TODO: this should be compiled out in production mode
 - (void)showModalError:(NSString *)message
 {
-  NSLog(@"[ERROR] Application received error: %@", message);
+  NSString *safeMessage = (message != nil) ? message : @"(nil)";
+  NSLog(@"[ERROR] Application received error: %@", safeMessage);
+
+  // Log native call stack to aid diagnosing crashes without JS context
+  NSArray<NSString *> *nativeStack = [NSThread callStackSymbols];
+  if (nativeStack.count > 0) {
+    NSLog(@"[ERROR] Native stack:\n%@", [nativeStack componentsJoinedByString:@"\n"]);
+  }
 
   if ([[TiSharedConfig defaultConfig] showErrorController] == NO) {
     return;
   }
   ENSURE_UI_THREAD(showModalError, message);
 
-  TiErrorController *error = [[TiErrorController alloc] initWithError:message];
+  TiErrorController *error = [[TiErrorController alloc] initWithError:safeMessage];
   TiErrorNavigationController *nav = [[[TiErrorNavigationController alloc] initWithRootViewController:error] autorelease];
   RELEASE_TO_NIL(error);
 
@@ -1140,20 +1150,78 @@ TI_INLINE void waitForMemoryPanicCleared(void); // WARNING: This must never be r
 
 - (void)showDetailedModalError:(TiScriptError *)error
 {
+  // Defensive: Build a comprehensive log output regardless of UI presentation setting
+  NSString *message = nil;
+  if (error != nil) {
+    message = (error.message != nil && error.message.length > 0) ? error.message : nil;
+    if (message == nil) {
+      // Try detailed description or fallback to description
+      message = ([error respondsToSelector:@selector(detailedDescription)] && error.detailedDescription.length > 0) ? error.detailedDescription : error.description;
+    }
+  }
+  NSString *safeMessage = (message != nil) ? message : @"(nil)";
+  NSLog(@"[ERROR] Application received script error: %@", safeMessage);
+
+  // Add JS source location if available
+  if (error != nil) {
+    if (error.sourceURL != nil || error.lineNo > 0 || error.column > 0) {
+      NSString *src = (error.sourceURL != nil) ? error.sourceURL : @"(unknown)";
+      NSLog(@"[ERROR] at %@:%ld:%ld", src, (long)error.lineNo, (long)error.column);
+    }
+    if (error.sourceLine != nil && error.sourceLine.length > 0) {
+      NSLog(@"[ERROR] source line: %@", error.sourceLine);
+    }
+
+    // JS stack/backtrace
+    if (error.backtrace != nil && error.backtrace.length > 0) {
+      NSLog(@"[ERROR] JS stack:\n%@", error.backtrace);
+    } else if (error.parsedJsStack != nil && error.parsedJsStack.count > 0) {
+      NSMutableArray *frames = [NSMutableArray arrayWithCapacity:error.parsedJsStack.count];
+      for (NSDictionary *frame in error.parsedJsStack) {
+        NSString *symbol = frame[@"symbol"] ?: frame[@"functionName"] ?
+                                                                      : @"(anonymous)";
+        NSString *file = frame[@"file"] ?: frame[@"sourceURL"] ?
+                                                               : @"(unknown)";
+        NSNumber *line = frame[@"line"] ?: frame[@"lineNo"]; // support both keys
+        NSNumber *col = frame[@"column"]; // optional
+        NSString *lineStr = line != nil ? [NSString stringWithFormat:@":%@", line] : @"";
+        NSString *colStr = col != nil ? [NSString stringWithFormat:@":%@", col] : @"";
+        [frames addObject:[NSString stringWithFormat:@"    at %@ (%@%@%@)", symbol, file, lineStr, colStr]];
+      }
+      NSLog(@"[ERROR] JS stack:\n%@", [frames componentsJoinedByString:@"\n"]);
+    }
+
+    // Native stack if provided by error, otherwise fallback to current call stack
+    NSArray<NSString *> *native = (error.formattedNativeStack != nil && error.formattedNativeStack.count > 0) ? error.formattedNativeStack : [NSThread callStackSymbols];
+    if (native.count > 0) {
+      NSLog(@"[ERROR] Native stack:\n%@", [native componentsJoinedByString:@"\n"]);
+    }
+
+    // Log raw dictionary if available for extra context
+    if (error.dictionaryValue != nil && error.dictionaryValue.count > 0) {
+      NSLog(@"[ERROR] Error dictionary: %@", error.dictionaryValue);
+    }
+  } else {
+    // No error object – still try to log a native stack for context
+    NSArray<NSString *> *nativeStack = [NSThread callStackSymbols];
+    if (nativeStack.count > 0) {
+      NSLog(@"[ERROR] Native stack:\n%@", [nativeStack componentsJoinedByString:@"\n"]);
+    }
+  }
+
   if ([[TiSharedConfig defaultConfig] showErrorController] == NO) {
-    NSLog(@"[ERROR] Application received error: %@", error.message);
     return;
   }
   ENSURE_UI_THREAD(showDetailedModalError, error);
 
   if (@available(iOS 13, *)) {
-    TiErrorController *errorVC = [[TiErrorController alloc] initWithScriptError:error];
+    TiErrorController *errorVC = (error != nil) ? [[TiErrorController alloc] initWithScriptError:error] : [[TiErrorController alloc] initWithError:@"Unknown error"];
     TiErrorNavigationController *nav = [[[TiErrorNavigationController alloc] initWithRootViewController:errorVC] autorelease];
     RELEASE_TO_NIL(errorVC);
 
     [[[self controller] topPresentedController] presentViewController:nav animated:YES completion:nil];
   } else {
-    [self showModalError:error.description];
+    [self showModalError:(error != nil ? error.description : @"Unknown error")];
   }
 }
 

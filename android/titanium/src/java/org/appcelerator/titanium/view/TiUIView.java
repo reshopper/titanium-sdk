@@ -20,6 +20,7 @@ import org.appcelerator.kroll.KrollProxy;
 import org.appcelerator.kroll.KrollProxyListener;
 import org.appcelerator.kroll.common.Log;
 import org.appcelerator.kroll.common.TiMessenger;
+import org.appcelerator.kroll.util.KrollLifecycleTracker;
 import org.appcelerator.titanium.TiApplication;
 import org.appcelerator.titanium.TiC;
 import org.appcelerator.titanium.TiDimension;
@@ -72,6 +73,11 @@ import android.view.ViewTreeObserver.OnPreDrawListener;
 import android.view.animation.Animation;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
+import android.widget.ImageView;
+import android.widget.TextView;
+
+import ti.modules.titanium.ui.UIModule;
+import androidx.core.graphics.ColorUtils;
 
 /**
  * This class is for Titanium View implementations, that correspond with TiViewProxy.
@@ -164,6 +170,9 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 	{
 		this.proxy = proxy;
 		this.layoutParams = new TiCompositeLayout.LayoutParams();
+
+		// Track view creation for debugging
+		KrollLifecycleTracker.trackViewCreated(this);
 	}
 
 	/**
@@ -778,8 +787,8 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				layoutParams.optionZIndex = 0;
 			}
 			layoutNativeView(true);
-		} else if (key.equals(TiC.PROPERTY_FOCUSABLE) && newValue != null) {
-			registerForKeyPress(nativeView, TiConvert.toBoolean(newValue, false));
+		} else if (key.equals(TiC.PROPERTY_FOCUSABLE)) {
+			getOuterView().setFocusable(TiConvert.toBoolean(newValue, false));
 		} else if (key.equals(TiC.PROPERTY_TOUCH_ENABLED)) {
 			nativeView.setEnabled(TiConvert.toBoolean(newValue));
 			doSetClickable(TiConvert.toBoolean(newValue));
@@ -822,10 +831,12 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 				if (this.nativeView != null) {
 					if (d.containsKeyAndNotNull(TiC.PROPERTY_BACKGROUND_COLOR)) {
-						this.nativeView.setBackgroundColor(
-							TiConvert.toColor(d, TiC.PROPERTY_BACKGROUND_COLOR, proxy.getActivity()));
+						int bgColor = TiConvert.toColor(d, TiC.PROPERTY_BACKGROUND_COLOR, proxy.getActivity());
+						this.nativeView.setBackgroundColor(bgColor);
+						onBackgroundColorChanged(bgColor);
 					} else {
 						this.nativeView.setBackground(null);
+						onBackgroundColorChanged(Color.TRANSPARENT);
 					}
 				}
 			} else {
@@ -842,6 +853,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 						if (newBackground
 							|| (key.equals(TiC.PROPERTY_OPACITY) || key.equals(TiC.PROPERTY_BACKGROUND_COLOR))) {
 							background.setBackgroundColor(bgColor);
+							onBackgroundColorChanged(bgColor);
 						}
 					}
 				}
@@ -873,10 +885,15 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 						handleBorderProperty(key, newValue);
 					}
 
-					// TIMOB-24898: disable HW acceleration to allow transparency
-					// when the backgroundColor alpha channel has been set
+					// TIMOB-24898: On older Android versions, transparency + rounded corners could require SW layer.
+					// Limit disabling HW acceleration to pre-Marshmallow. On newer versions, prefer HW with outline clipping.
 					if ((bgColor != null) && (Color.alpha(bgColor) < 255)) {
-						disableHWAcceleration();
+						if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+							disableHWAcceleration();
+						} else if (borderView != null && borderView.hasRadius()) {
+							// Use hardware-accelerated clipping via outline where possible (API 21+)
+							borderView.setClipToOutline(true);
+						}
 					}
 				}
 
@@ -924,16 +941,21 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				}
 			}
 		} else if (key.equals(TiC.PROPERTY_TRANSLATION_X)) {
-			if (getOuterView() != null) {
-				ViewCompat.setTranslationX(getOuterView(), TiConvert.toFloat(newValue));
+			TiDimension val = TiConvert.toTiDimension(newValue, TiDimension.TYPE_WIDTH);
+			if (val != null) {
+				ViewCompat.setTranslationX(getOuterView(), (float) val.getPixels(getOuterView()));
 			}
 		} else if (key.equals(TiC.PROPERTY_TRANSLATION_Y)) {
-			if (getOuterView() != null) {
-				ViewCompat.setTranslationY(getOuterView(), TiConvert.toFloat(newValue));
+			TiDimension val = TiConvert.toTiDimension(newValue, TiDimension.TYPE_HEIGHT);
+			if (val != null) {
+				ViewCompat.setTranslationY(getOuterView(), (float) val.getPixels(getOuterView()));
 			}
 		} else if (key.equals(TiC.PROPERTY_TRANSLATION_Z)) {
-			if (getOuterView() != null) {
-				ViewCompat.setTranslationZ(getOuterView(), TiConvert.toFloat(newValue));
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+				TiDimension val = TiConvert.toTiDimension(newValue, TiDimension.TYPE_UNDEFINED);
+				if (val != null) {
+					nativeView.setTranslationZ((float) val.getPixels(getOuterView()));
+				}
 			}
 		} else if (key.equals(TiC.PROPERTY_TRANSITION_NAME)) {
 			if (nativeView != null) {
@@ -948,9 +970,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				ViewCompat.setScaleY(getOuterView(), TiConvert.toFloat(newValue));
 			}
 		} else if (key.equals(TiC.PROPERTY_ROTATION)) {
-			if (getOuterView() != null) {
-				ViewCompat.setRotation(getOuterView(), TiConvert.toFloat(newValue));
-			}
+			getOuterView().setRotation(TiConvert.toFloat(newValue));
 		} else if (key.equals(TiC.PROPERTY_ROTATION_X)) {
 			if (getOuterView() != null) {
 				ViewCompat.setRotationX(getOuterView(), TiConvert.toFloat(newValue));
@@ -971,6 +991,12 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				}
 			} else {
 				Log.w(TAG, "Setting the 'viewShadowColor' property requires Android P or later");
+			}
+		} else if (key.equals(TiC.PROPERTY_CLIP_MODE)) {
+			if (nativeView != null) {
+				setClipMode(TiConvert.toInt(newValue, UIModule.CLIP_MODE_DEFAULT));
+				// Re-apply after next layout to ensure hierarchy updates are captured.
+				reapplyClipModeOnNextLayout(TiConvert.toInt(newValue, UIModule.CLIP_MODE_DEFAULT));
 			}
 		} else if (Log.isDebugModeEnabled()) {
 			Log.d(TAG, "Unhandled property key: " + key, Log.DEBUG_MODE);
@@ -1115,11 +1141,18 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		}
 
 		if (d.containsKey(TiC.PROPERTY_TRANSLATION_X) && !nativeViewNull) {
-			ViewCompat.setTranslationX(nativeView, TiConvert.toFloat(d, TiC.PROPERTY_TRANSLATION_X));
+			Object newValue = d.get(TiC.PROPERTY_TRANSLATION_X);
+			TiDimension val = TiConvert.toTiDimension(newValue, TiDimension.TYPE_WIDTH);
+			if (val != null) {
+				ViewCompat.setTranslationX(nativeView, (float) val.getPixels(nativeView));
+			}
 		}
-
 		if (d.containsKey(TiC.PROPERTY_TRANSLATION_Y) && !nativeViewNull) {
-			ViewCompat.setTranslationY(nativeView, TiConvert.toFloat(d, TiC.PROPERTY_TRANSLATION_Y));
+			Object newValue = d.get(TiC.PROPERTY_TRANSLATION_Y);
+			TiDimension val = TiConvert.toTiDimension(newValue, TiDimension.TYPE_HEIGHT);
+			if (val != null) {
+				ViewCompat.setTranslationY(nativeView, (float) val.getPixels(nativeView));
+			}
 		}
 
 		if (d.containsKey(TiC.PROPERTY_TRANSLATION_Z) && !nativeViewNull) {
@@ -1139,8 +1172,19 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			}
 		}
 
+		if (d.containsKey(TiC.PROPERTY_CLIP_MODE) && !nativeViewNull) {
+			final int clip = TiConvert.toInt(d.getInt(TiC.PROPERTY_CLIP_MODE), UIModule.CLIP_MODE_DEFAULT);
+			setClipMode(clip);
+			// Re-apply after next layout to catch late parent creations/re-parenting.
+			reapplyClipModeOnNextLayout(clip);
+		}
+
 		if (!nativeViewNull && d.containsKeyAndNotNull(TiC.PROPERTY_TRANSITION_NAME)) {
 			ViewCompat.setTransitionName(nativeView, d.getString(TiC.PROPERTY_TRANSITION_NAME));
+		}
+
+		if (d.containsKey(TiC.PROPERTY_ADAPTIVE_CONTRAST)) {
+			setAdaptiveContrast(TiConvert.toBoolean(d, TiC.PROPERTY_ADAPTIVE_CONTRAST, false));
 		}
 	}
 
@@ -1193,6 +1237,78 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			}
 			nativeView.setBackground(background);
 		}
+	}
+
+	private void setClipMode(int clipMode)
+	{
+		if (nativeView == null) {
+			Log.w(TAG, "setClipMode: nativeView is null, returning early");
+			return;
+		}
+		TiViewProxy currentProxy = proxy;
+		int depth = 0;
+
+		while (currentProxy.getParent() != null) {
+			depth++;
+			TiUIView uiView = currentProxy.peekView();
+			if (uiView != null) {
+				View outerView = uiView.getOuterView();
+				if (outerView instanceof ViewGroup viewGroup) {
+					boolean shouldClip = (clipMode != UIModule.CLIP_MODE_DISABLED);
+
+					viewGroup.setClipChildren(shouldClip);
+					// When disabling clipping, also disable clipping to padding for more predictable behavior.
+					if (!shouldClip) {
+						viewGroup.setClipToPadding(false);
+					}
+					// Force a layout/redraw to apply clipping changes
+					outerView.invalidate();
+					outerView.requestLayout();
+				} else {
+					Log.d(TAG, "setClipMode: [" + depth + "] outerView is not ViewGroup: "
+						+ (outerView != null ? outerView.getClass().getSimpleName() : "null"));
+				}
+			} else {
+				Log.d(TAG, "setClipMode: [" + depth + "] uiView is null for proxy=" + currentProxy.getApiName());
+				// Store clipMode for later application when view is created
+				// This is particularly important for ListView header/footer views
+				currentProxy.setProperty(TiC.PROPERTY_CLIP_MODE, clipMode);
+			}
+
+			currentProxy = currentProxy.getParent();
+			if (currentProxy.getApiName().equals("Ti.UI.Window")) {
+				Log.d(TAG, "setClipMode: [" + depth + "] Reached Window, continuing...");
+				// Don't stop at Window - continue to process Window's parents too
+			}
+		}
+
+		Log.d(TAG, "setClipMode: Completed traversal after " + depth + " levels");
+	}
+
+	/**
+	 * Re-applies the given clip mode once after the next layout pass of this view's outerView.
+	 * This helps ensure hierarchy changes that occur during layout (e.g. late parent creation or re-parenting)
+	 * also receive the correct clipping settings.
+	 */
+	private void reapplyClipModeOnNextLayout(final int clipMode)
+	{
+		final View outer = getOuterView();
+		if (outer == null) {
+			return;
+		}
+		outer.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+			@Override
+			public void onLayoutChange(View v, int left, int top, int right, int bottom,
+				int oldLeft, int oldTop, int oldRight, int oldBottom)
+			{
+				try {
+					v.removeOnLayoutChangeListener(this);
+				} catch (Throwable ignore) {
+					// No-op
+				}
+				setClipMode(clipMode);
+			}
+		});
 	}
 
 	/**
@@ -1338,6 +1454,10 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 		if (Log.isDebugModeEnabled()) {
 			Log.d(TAG, "Releasing: " + this, Log.DEBUG_MODE);
 		}
+
+		// Track view destruction for debugging
+		KrollLifecycleTracker.trackViewDestroyed(this);
+
 		releaseLongPressMotionEvent();
 		View nv = getNativeView();
 		if (nv != null) {
@@ -1554,10 +1674,14 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				borderView.invalidate();
 			}
 
-			// TIMOB-24898: disable HW acceleration to allow transparency
-			// when the backgroundColor alpha channel has been set
+			// TIMOB-24898: On older Android versions, transparency + rounded corners could require SW layer.
+			// Limit disabling HW acceleration to pre-Marshmallow. On newer versions, prefer HW with outline clipping.
 			if ((bgColor != null) && (Color.alpha(bgColor) < 255)) {
-				disableHWAcceleration();
+				if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+					disableHWAcceleration();
+				} else if (borderView != null && borderView.hasRadius()) {
+					borderView.setClipToOutline(true);
+				}
 			}
 		}
 	}
@@ -2202,9 +2326,7 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 
 	protected void disableHWAcceleration()
 	{
-		if (this.borderView != null && !(proxy.hasProperty("keepHardwareMode")
-			&& TiConvert.toBoolean(proxy.getProperty("keepHardwareMode"), false))
-		) {
+		if (this.borderView != null) {
 			this.borderView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
 		}
 	}
@@ -2402,5 +2524,87 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 				info.setLongClickable(false);
 			}
 		});
+	}
+
+	protected boolean adaptiveContrast = false;
+	protected int currentBackgroundColor = Color.TRANSPARENT;
+
+	public void setAdaptiveContrast(boolean adaptive)
+	{
+		this.adaptiveContrast = adaptive;
+		if (adaptive) {
+			updateAdaptiveColors();
+		}
+	}
+
+	/**
+	 * Updates colors of child views based on background luminance
+	 */
+	protected void updateAdaptiveColors()
+	{
+		if (!adaptiveContrast || currentBackgroundColor == Color.TRANSPARENT) {
+			return;
+		}
+
+		// Calculate luminance of current background
+		double luminance = ColorUtils.calculateLuminance(currentBackgroundColor);
+		boolean isLightBackground = luminance > 0.5;
+
+		// Update this view's native view and child TiUIViews
+		updateViewColorsForContrast(nativeView, isLightBackground);
+		
+		// Recursively update child TiUIViews
+		for (TiUIView child : children) {
+			child.updateAdaptiveColors();
+		}
+	}
+
+	/**
+	 * Updates colors in a specific view for optimal contrast
+	 * @param view The view to update
+	 * @param isLightBackground Whether the background is light (requiring dark content)
+	 */
+	private void updateViewColorsForContrast(View view, boolean isLightBackground)
+	{
+		if (view == null) {
+			return;
+		}
+		
+		// Update text color for TextViews
+		if (view instanceof TextView) {
+			TextView textView = (TextView) view;
+			int adaptiveColor = isLightBackground
+				? Color.parseColor("#212121") // Dark text for light background
+				: Color.parseColor("#FAFAFA"); // Light text for dark background
+			textView.setTextColor(adaptiveColor);
+		}
+		
+		// Update image tint for ImageViews
+		if (view instanceof ImageView) {
+			ImageView imageView = (ImageView) view;
+			int adaptiveTint = isLightBackground
+				? Color.parseColor("#424242") // Dark tint for light background
+				: Color.parseColor("#E0E0E0"); // Light tint for dark background
+			imageView.setColorFilter(adaptiveTint);
+		}
+		
+		// If this view is a ViewGroup, update its children too
+		if (view instanceof ViewGroup) {
+			ViewGroup viewGroup = (ViewGroup) view;
+			for (int i = 0; i < viewGroup.getChildCount(); i++) {
+				updateViewColorsForContrast(viewGroup.getChildAt(i), isLightBackground);
+			}
+		}
+	}
+
+	/**
+	 * Override this method in subclasses or add listener to handle background color changes
+	 */
+	protected void onBackgroundColorChanged(int color)
+	{
+		currentBackgroundColor = color;
+		if (adaptiveContrast) {
+			updateAdaptiveColors();
+		}
 	}
 }

@@ -747,6 +747,7 @@ NSArray *moviePlayerKeys = nil;
 
   playing = YES;
   AVPlayer *player = [[self ensurePlayer] player];
+  [player setValue:@(NO) forKey:@"preventsSleepDuringVideoPlayback"];
 
   if (seekToZeroBeforePlay) {
     seekToZeroBeforePlay = NO;

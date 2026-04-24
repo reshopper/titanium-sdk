@@ -404,11 +404,9 @@
 - (void)setAttributedHintText_:(id)value
 {
 #ifdef USE_TI_UIATTRIBUTEDSTRING
-  TiUIAttributedStringProxy *as = [TiUIAttributedStringProxy fromProperties:value];
-  if (as) {
-    [[self proxy] replaceValue:as forKey:@"attributedHintText" notification:NO];
-    [(TiTextField *)[self textWidgetView] setAttributedPlaceholder:[as attributedString]];
-  }
+  ENSURE_SINGLE_ARG(value, TiUIAttributedStringProxy);
+  [[self proxy] replaceValue:value forKey:@"attributedHintText" notification:NO];
+  [(TiTextField *)[self textWidgetView] setAttributedPlaceholder:[value attributedString]];
 #endif
 }
 

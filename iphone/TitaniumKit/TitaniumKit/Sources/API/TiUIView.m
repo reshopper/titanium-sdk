@@ -1268,9 +1268,9 @@ DEFINE_EXCEPTIONS
   RELEASE_TO_NIL(animation);
 
   if ([self.proxy isKindOfClass:[TiViewProxy class]] && ![(TiViewProxy *)self.proxy viewReady]) {
-    DebugLog(@"[DEBUG] Ti.View.animate() called before view %@ was ready: Will re-attempt", self);
+    // DebugLog(@"[DEBUG] Ti.View.animate() called before view %@ was ready: Will re-attempt", self);
     if (animationDelayGuard++ > 5) {
-      DebugLog(@"[DEBUG] Animation guard triggered, exceeded timeout to perform animation.");
+      // DebugLog(@"[DEBUG] Animation guard triggered, exceeded timeout to perform animation.");
       animationDelayGuard = 0;
       return;
     }

@@ -25,6 +25,8 @@ import org.appcelerator.titanium.proxy.TiViewProxy;
 import org.appcelerator.titanium.util.TiConvert;
 import org.appcelerator.titanium.view.TiUIView;
 
+import java.util.HashMap;
+
 import ti.modules.titanium.ui.widget.listview.ListViewProxy;
 import ti.modules.titanium.ui.RefreshControlProxy;
 import ti.modules.titanium.ui.SearchBarProxy;
@@ -46,8 +48,16 @@ public class TiUIListView extends TiUIView
 	{
 		super(proxy);
 
-		getLayoutParams().autoFillsHeight = true;
-		getLayoutParams().autoFillsWidth = true;
+		// Respect explicit SIZE requests if provided at creation time; otherwise default to fill.
+		final KrollDict initialProps = proxy.getProperties();
+		final Object initHeight = initialProps != null ? initialProps.get(TiC.PROPERTY_HEIGHT) : null;
+		final Object initWidth = initialProps != null ? initialProps.get(TiC.PROPERTY_WIDTH) : null;
+		if (!(TiC.LAYOUT_SIZE.equals(initHeight))) {
+			getLayoutParams().autoFillsHeight = true;
+		}
+		if (!(TiC.LAYOUT_SIZE.equals(initWidth))) {
+			getLayoutParams().autoFillsWidth = true;
+		}
 
 		this.listView = new TiListView((ListViewProxy) proxy);
 		setNativeView(listView);
@@ -256,6 +266,82 @@ public class TiUIListView extends TiUIView
 			|| name.equals(TiC.PROPERTY_SEARCH_TEXT)) {
 			this.listView.update(true);
 		}
+
+		if (name.equals(TiC.PROPERTY_CLIP_VIEWS)) {
+			this.listView.getRecyclerView().setClipToPadding(TiConvert.toBoolean(value, true));
+		}
+
+		if (name.equals(TiC.PROPERTY_PADDING)) {
+			setPadding((HashMap) value);
+		}
+
+		if (name.equals(TiC.PROPERTY_CONTENT_INSETS)) {
+			setContentInsets((HashMap) value);
+		}
+	}
+
+	private void setPadding(HashMap<String, Object> d)
+	{
+		int paddingLeft = this.listView.getRecyclerView().getPaddingLeft();
+		int paddingRight = this.listView.getRecyclerView().getPaddingRight();
+		int paddingTop = this.listView.getRecyclerView().getPaddingTop();
+		int paddingBottom = this.listView.getRecyclerView().getPaddingBottom();
+
+		if (d.containsKey(TiC.PROPERTY_LEFT)) {
+			paddingLeft = TiConvert.toTiDimension(TiConvert.toInt(d.get(TiC.PROPERTY_LEFT), 0),
+				TiDimension.TYPE_LEFT).getAsPixels(this.listView);
+		}
+
+		if (d.containsKey(TiC.PROPERTY_RIGHT)) {
+			paddingRight = TiConvert.toTiDimension(TiConvert.toInt(d.get(TiC.PROPERTY_RIGHT), 0),
+				TiDimension.TYPE_RIGHT).getAsPixels(this.listView);
+		}
+
+		if (d.containsKey(TiC.PROPERTY_TOP)) {
+			paddingTop = TiConvert.toTiDimension(TiConvert.toInt(d.get(TiC.PROPERTY_TOP), 0),
+				TiDimension.TYPE_TOP).getAsPixels(this.listView);
+		}
+
+		if (d.containsKey(TiC.PROPERTY_BOTTOM)) {
+			paddingBottom = TiConvert.toTiDimension(TiConvert.toInt(d.get(TiC.PROPERTY_BOTTOM), 0),
+				TiDimension.TYPE_BOTTOM).getAsPixels(this.listView);
+		}
+
+		this.listView.getRecyclerView().setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom);
+	}
+
+	private void setContentInsets(HashMap<String, Object> d)
+	{
+		int paddingLeft = this.listView.getRecyclerView().getPaddingLeft();
+		int paddingRight = this.listView.getRecyclerView().getPaddingRight();
+		int paddingTop = this.listView.getRecyclerView().getPaddingTop();
+		int paddingBottom = this.listView.getRecyclerView().getPaddingBottom();
+
+		if (d.containsKey(TiC.PROPERTY_LEFT)) {
+			paddingLeft = TiConvert.toTiDimension(TiConvert.toInt(d.get(TiC.PROPERTY_LEFT), 0),
+				TiDimension.TYPE_LEFT).getAsPixels(this.listView);
+		}
+
+		if (d.containsKey(TiC.PROPERTY_RIGHT)) {
+			paddingRight = TiConvert.toTiDimension(TiConvert.toInt(d.get(TiC.PROPERTY_RIGHT), 0),
+				TiDimension.TYPE_RIGHT).getAsPixels(this.listView);
+		}
+
+		if (d.containsKey(TiC.PROPERTY_TOP)) {
+			paddingTop = TiConvert.toTiDimension(TiConvert.toInt(d.get(TiC.PROPERTY_TOP), 0),
+				TiDimension.TYPE_TOP).getAsPixels(this.listView);
+		}
+
+		if (d.containsKey(TiC.PROPERTY_BOTTOM)) {
+			paddingBottom = TiConvert.toTiDimension(TiConvert.toInt(d.get(TiC.PROPERTY_BOTTOM), 0),
+				TiDimension.TYPE_BOTTOM).getAsPixels(this.listView);
+		}
+
+		this.listView.getRecyclerView().setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom);
+		
+		// Set clipChildren to false to prevent content clipping when using insets
+		this.listView.getRecyclerView().setClipToPadding(false);
+		this.listView.getRecyclerView().setClipChildren(false);
 	}
 
 	/**

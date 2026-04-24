@@ -349,6 +349,10 @@ public class TiProperties
 			}
 		}
 		for (String key : preferences.getAll().keySet()) {
+			// Guard against unexpected null keys to avoid NPEs
+			if (key == null) {
+				continue;
+			}
 			if (key.endsWith(".length")) {
 				properties.add(key.substring(0, key.length() - 7));
 			} else if (key.matches(".+\\.\\d+$")) {

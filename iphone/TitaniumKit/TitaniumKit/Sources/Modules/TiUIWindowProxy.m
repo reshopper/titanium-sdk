@@ -12,6 +12,7 @@
 #import "TiLayoutQueue.h"
 #import "TiUIViewProxy.h"
 #import "Webcolor.h"
+#import <TitaniumKit/KrollPromise.h>
 
 // this is how long we should wait on the new JS context to be loaded
 // holding the UI thread before we return during an window open. we
@@ -33,12 +34,11 @@
  */
 
 @interface TiUIWindowProxyLatch : NSObject {
-  dispatch_semaphore_t semaphore;
-  dispatch_queue_t stateQueue;
+  NSCondition *lock;
   TiUIWindowProxy *window;
   id args;
   BOOL completed;
-  BOOL timedOut;
+  BOOL timeout;
 }
 @end
 
@@ -49,20 +49,14 @@
   if (self = [super init]) {
     window = [window_ retain];
     args = [args_ retain];
-    semaphore = dispatch_semaphore_create(0);
-    stateQueue = dispatch_queue_create("ti.window.latch", DISPATCH_QUEUE_SERIAL);
+    lock = [[NSCondition alloc] init];
   }
   return self;
 }
 
 - (void)dealloc
 {
-  if (semaphore) {
-    dispatch_release(semaphore);
-  }
-  if (stateQueue) {
-    dispatch_release(stateQueue);
-  }
+  RELEASE_TO_NIL(lock);
   RELEASE_TO_NIL(window);
   RELEASE_TO_NIL(args);
   [super dealloc];
@@ -70,41 +64,30 @@
 
 - (void)booted:(id)arg
 {
-  __block BOOL shouldBoot = NO;
-  dispatch_sync(stateQueue, ^{
-    completed = YES;
-    if (timedOut) {
-      shouldBoot = YES;
-    }
-  });
-  dispatch_semaphore_signal(semaphore);
-  if (shouldBoot) {
+  [lock lock];
+  completed = YES;
+  [lock signal];
+  if (timeout) {
     [window boot:YES args:args];
   }
+  [lock unlock];
 }
 
 - (BOOL)waitForBoot
 {
-  __block BOOL alreadyCompleted = NO;
-  dispatch_sync(stateQueue, ^{
-    alreadyCompleted = completed;
-  });
-
-  if (alreadyCompleted) {
-    return YES;
+  BOOL yn = NO;
+  [lock lock];
+  if (completed) {
+    yn = YES;
+  } else {
+    if (![lock waitUntilDate:[NSDate dateWithTimeIntervalSinceNow:EXTERNAL_JS_WAIT_TIME]]) {
+      timeout = YES;
+    } else {
+      yn = YES;
+    }
   }
-
-  dispatch_time_t timeout_time = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(EXTERNAL_JS_WAIT_TIME * NSEC_PER_SEC));
-  long result = dispatch_semaphore_wait(semaphore, timeout_time);
-
-  if (result != 0) {
-    // Timed out
-    dispatch_sync(stateQueue, ^{
-      timedOut = YES;
-    });
-    return NO;
-  }
-  return YES;
+  [lock unlock];
+  return yn;
 }
 
 @end
@@ -156,6 +139,13 @@
 - (NSString *)apiName
 {
   return @"Ti.UI.Window";
+}
+
+// measureActualDimensions(options?, callback?) -> Promise<{ width, height }>
+- (JSValue *)measureActualDimensions:(id)args
+{
+  // Delegate to TiViewProxy's measure to compute size of content view pre-open
+  return [super measure:args];
 }
 
 - (void)dealloc
@@ -225,13 +215,13 @@
   // Sadly, today is not that day. Without shutdown, we leak all over the place.
   if (context != nil) {
     NSMutableArray *childrenToRemove = [[NSMutableArray alloc] init];
-    dispatch_sync(childrenQueue, ^{
-      for (TiViewProxy *child in children) {
-        if ([child belongsToContext:context]) {
-          [childrenToRemove addObject:child];
-        }
+    pthread_rwlock_rdlock(&childrenLock);
+    for (TiViewProxy *child in children) {
+      if ([child belongsToContext:context]) {
+        [childrenToRemove addObject:child];
       }
-    });
+    }
+    pthread_rwlock_unlock(&childrenLock);
     [context performSelector:@selector(shutdown:) withObject:nil afterDelay:1.0];
     RELEASE_TO_NIL(context);
 

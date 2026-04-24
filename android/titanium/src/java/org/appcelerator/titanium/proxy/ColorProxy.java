@@ -28,13 +28,15 @@ public class ColorProxy extends KrollProxy
 	@Kroll.method
 	public String toHex()
 	{
-		// Convert to ARGB hex string.
-		return String.format(
-			"#%02X%02X%02X%02X",
-			this.color >>> 24,
-			(this.color >>> 16) & 0xFF,
-			(this.color >>> 8) & 0xFF,
-			this.color & 0xFF);
+		// Match iOS behavior: omit alpha when fully opaque; otherwise return AARRGGBB
+		int alpha = (this.color >>> 24) & 0xFF;
+		int red = (this.color >>> 16) & 0xFF;
+		int green = (this.color >>> 8) & 0xFF;
+		int blue = this.color & 0xFF;
+		if (alpha == 0xFF) {
+			return String.format("#%02X%02X%02X", red, green, blue);
+		}
+		return String.format("#%02X%02X%02X%02X", alpha, red, green, blue);
 	}
 
 	@Kroll.method

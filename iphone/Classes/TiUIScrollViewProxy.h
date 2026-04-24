@@ -13,6 +13,10 @@
 }
 - (void)setContentOffset:(id)value withObject:(id)animated;
 - (void)layoutChildrenAfterContentSize:(BOOL)optimize;
+- (void)setContentInsets:(id)value withObject:(id)animated;
+- (void)setZoomScale:(id)value withObject:(id)animated;
+
+- (id)contentInsets;
 
 @end
 

@@ -76,6 +76,7 @@ public abstract class TiWindowProxy extends TiViewProxy
 	public TiWindowProxy navigationWindow;
 	protected KrollPromise openPromise;
 	protected KrollPromise closePromise;
+	private boolean willCloseFired = false;
 
 	public interface PostOpenListener {
 		void onPostOpen(TiWindowProxy window);
@@ -178,10 +179,34 @@ public abstract class TiWindowProxy extends TiViewProxy
 				options = new KrollDict();
 			}
 
+			fireWillCloseIfNeeded();
 			handleClose(options);
 			// FIXME: Maybe fire the close event here and set opened to false as well, rather than leaving to subclasses?
 		});
 		return closePromise;
+	}
+
+	/**
+	 * Fires the willClose event at most once per close cycle. Called from close() and closeFromActivity().
+	 */
+	private void fireWillCloseIfNeeded()
+	{
+		if (willCloseFired) {
+			return;
+		}
+		willCloseFired = true;
+		if (hasListeners(TiC.EVENT_WILL_CLOSE)) {
+			fireSyncEvent(TiC.EVENT_WILL_CLOSE, null);
+		}
+	}
+
+	/**
+	 * Clears the willClose guard so the next close can fire willClose again. Subclasses must call this when
+	 * the window is marked opened (e.g. when setting opened = true).
+	 */
+	protected void clearWillCloseFiredFlag()
+	{
+		willCloseFired = false;
 	}
 
 	public void closeFromActivity(boolean activityIsFinishing)
@@ -189,6 +214,8 @@ public abstract class TiWindowProxy extends TiViewProxy
 		if (!opened) {
 			return;
 		}
+
+		fireWillCloseIfNeeded();
 
 		KrollDict data = null;
 		if (activityIsFinishing) {

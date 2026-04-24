@@ -15,6 +15,7 @@ import java.util.TreeSet;
 
 import org.appcelerator.kroll.KrollDict;
 import org.appcelerator.kroll.KrollFunction;
+import org.appcelerator.kroll.KrollPromise;
 import org.appcelerator.kroll.KrollProxy;
 import org.appcelerator.kroll.KrollRuntime;
 import org.appcelerator.kroll.annotations.Kroll;
@@ -40,6 +41,8 @@ import android.graphics.Bitmap.Config;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Message;
+import android.os.SystemClock;
+import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.ViewAnimationUtils;
 
@@ -82,8 +85,6 @@ import android.view.ViewAnimationUtils;
 	TiC.PROPERTY_TRANSFORM,
 	TiC.PROPERTY_ELEVATION,
 	TiC.PROPERTY_VIEW_SHADOW_COLOR,
-	TiC.PROPERTY_TRANSLATION_X,
-	TiC.PROPERTY_TRANSLATION_Y,
 	TiC.PROPERTY_TRANSLATION_Z,
 	TiC.PROPERTY_ROTATION,
 	TiC.PROPERTY_ROTATION_X,
@@ -95,7 +96,8 @@ import android.view.ViewAnimationUtils;
 	TiC.PROPERTY_TRANSITION_NAME,
 	TiC.PROPERTY_HIDDEN_BEHAVIOR,
 	TiC.PROPERTY_ANCHOR_POINT,
-	TiC.PROPERTY_ACCESSIBILITY_DISABLE_LONG
+	TiC.PROPERTY_ACCESSIBILITY_DISABLE_LONG,
+	TiC.PROPERTY_CLIP_MODE
 })
 public abstract class TiViewProxy extends KrollProxy
 {
@@ -133,11 +135,18 @@ public abstract class TiViewProxy extends KrollProxy
 	@Override
 	public void handleCreationDict(KrollDict options)
 	{
+		// Extract 'children' before property processing so it goes through add()
+		Object childArray = options.containsKey("children") ? options.remove("children") : null;
+
 		options = handleStyleOptions(options);
 		super.handleCreationDict(options);
 
 		if (options.containsKey(TiC.PROPERTY_OVERRIDE_CURRENT_ANIMATION)) {
 			overrideCurrentAnimation = TiConvert.toBoolean(options, TiC.PROPERTY_OVERRIDE_CURRENT_ANIMATION, false);
+		}
+
+		if (childArray != null) {
+			add(childArray);
 		}
 
 		//TODO eventManager.addOnEventChangeListener(this);
@@ -356,6 +365,38 @@ public abstract class TiViewProxy extends KrollProxy
 	public void setHeight(Object height)
 	{
 		setPropertyAndFire(TiC.PROPERTY_HEIGHT, height);
+	}
+
+	@Kroll.getProperty
+	public float getTranslationX()
+	{
+		if (view != null && view.getNativeView() != null) {
+			DisplayMetrics metrics = TiApplication.getInstance().getResources().getDisplayMetrics();
+			return view.getNativeView().getTranslationX() / metrics.density;
+		}
+		return TiConvert.toFloat(getProperty(TiC.PROPERTY_TRANSLATION_X), 0);
+	}
+
+	@Kroll.setProperty
+	public void setTranslationX(Object value)
+	{
+		setPropertyAndFire(TiC.PROPERTY_TRANSLATION_X, value);
+	}
+
+	@Kroll.getProperty
+	public float getTranslationY()
+	{
+		if (view != null && view.getNativeView() != null) {
+			DisplayMetrics metrics = TiApplication.getInstance().getResources().getDisplayMetrics();
+			return view.getNativeView().getTranslationY() / metrics.density;
+		}
+		return TiConvert.toFloat(getProperty(TiC.PROPERTY_TRANSLATION_Y), 0);
+	}
+
+	@Kroll.setProperty
+	public void setTranslationY(Object value)
+	{
+		setPropertyAndFire(TiC.PROPERTY_TRANSLATION_Y, value);
 	}
 
 	@Kroll.getProperty
@@ -1418,5 +1459,200 @@ public abstract class TiViewProxy extends KrollProxy
 				TiUIHelper.showSoftKeyboard(nv, false);
 			}
 		}
+	}
+
+	/**
+	 * Measures the view and returns its computed size in default units (DIP).
+	 * Options can include:
+	 *  - width: exact width constraint
+	 *  - height: exact height constraint
+	 *  - maxWidth: maximum width constraint (AT_MOST)
+	 *  - maxHeight: maximum height constraint (AT_MOST)
+	 */
+	@Kroll.method
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	public KrollPromise<KrollDict> measure(@Kroll.argument(optional = true) KrollDict options,
+		@Kroll.argument(optional = true) KrollFunction callback)
+	{
+		return KrollPromise.create((promise) -> {
+			getMainHandler().post(() -> {
+				try {
+					TiUIView tiv = getOrCreateView();
+					if (tiv == null) {
+						throw new IllegalStateException("View could not be created");
+					}
+					View nv = tiv.getNativeView();
+					if (nv == null) {
+						throw new IllegalStateException("Native view is not available");
+					}
+
+					// Resolve constraints
+					int widthPx = 0;
+					int heightPx = 0;
+					int widthMode = android.view.View.MeasureSpec.UNSPECIFIED;
+					int heightMode = android.view.View.MeasureSpec.UNSPECIFIED;
+					int minWidthPx = -1;
+					int minHeightPx = -1;
+					int maxFrames = 3;
+					int timeoutMs = 200;
+
+					if (options != null) {
+						if (options.containsKey(TiC.PROPERTY_WIDTH)) {
+							TiDimension dim = TiConvert.toTiDimension(
+								options, TiC.PROPERTY_WIDTH, TiDimension.TYPE_WIDTH);
+							if (dim != null) {
+								widthPx = (int) dim.getPixels(nv);
+								widthMode = android.view.View.MeasureSpec.EXACTLY;
+							}
+						} else if (options.containsKey("maxWidth")) {
+							TiDimension dim = TiConvert.toTiDimension(
+								options, "maxWidth", TiDimension.TYPE_WIDTH);
+							if (dim != null) {
+								widthPx = (int) dim.getPixels(nv);
+								widthMode = android.view.View.MeasureSpec.AT_MOST;
+							}
+						}
+
+						// Minimums and retry controls
+						if (options.containsKey("minWidth")) {
+							TiDimension dim = TiConvert.toTiDimension(options, "minWidth", TiDimension.TYPE_WIDTH);
+							if (dim != null) {
+								minWidthPx = (int) dim.getPixels(nv);
+							}
+						}
+
+						if (options.containsKey(TiC.PROPERTY_HEIGHT)) {
+							TiDimension dim = TiConvert.toTiDimension(
+								options, TiC.PROPERTY_HEIGHT, TiDimension.TYPE_HEIGHT);
+							if (dim != null) {
+								heightPx = (int) dim.getPixels(nv);
+								heightMode = android.view.View.MeasureSpec.EXACTLY;
+							}
+						} else if (options.containsKey("maxHeight")) {
+							TiDimension dim = TiConvert.toTiDimension(
+								options, "maxHeight", TiDimension.TYPE_HEIGHT);
+							if (dim != null) {
+								heightPx = (int) dim.getPixels(nv);
+								heightMode = android.view.View.MeasureSpec.AT_MOST;
+							}
+						}
+
+						if (options.containsKey("minHeight")) {
+							TiDimension dim = TiConvert.toTiDimension(options, "minHeight", TiDimension.TYPE_HEIGHT);
+							if (dim != null) {
+								minHeightPx = (int) dim.getPixels(nv);
+							}
+						}
+						if (options.containsKey("maxFrames")) {
+							maxFrames = TiConvert.toInt(options.get("maxFrames"), maxFrames);
+						}
+						if (options.containsKey("timeoutMs")) {
+							timeoutMs = TiConvert.toInt(options.get("timeoutMs"), timeoutMs);
+						}
+					}
+
+					// Provide sensible defaults for width to allow natural wrap content measurement.
+					if (widthMode == android.view.View.MeasureSpec.UNSPECIFIED) {
+						DisplayMetrics dm = TiApplication.getInstance().getResources().getDisplayMetrics();
+						widthPx = dm.widthPixels;
+						widthMode = android.view.View.MeasureSpec.AT_MOST;
+					}
+
+					final int fWidthPx = widthPx;
+					final int fHeightPx = heightPx;
+					final int fWidthMode = widthMode;
+					final int fHeightMode = heightMode;
+
+					final int[] framesLeft = new int[] { maxFrames };
+					final long deadline = SystemClock.uptimeMillis() + Math.max(0, timeoutMs);
+					final int fMinWidthPx = minWidthPx;
+					final int fMinHeightPx = minHeightPx;
+					Runnable doMeasure = new Runnable() {
+						@Override
+						public void run()
+						{
+							try {
+								int wSpec = android.view.View.MeasureSpec.makeMeasureSpec(fWidthPx, fWidthMode);
+								int hSpec = android.view.View.MeasureSpec.makeMeasureSpec(fHeightPx, fHeightMode);
+
+								// Perform measure on the native view (works even if not attached)
+								nv.measure(wSpec, hSpec);
+								int measuredW = nv.getMeasuredWidth();
+								int measuredH = nv.getMeasuredHeight();
+
+								// If minimum constraints requested, retry until satisfied or limits reached
+								boolean widthOk = (fMinWidthPx <= 0) || (measuredW >= fMinWidthPx);
+								boolean heightOk = (fMinHeightPx <= 0) || (measuredH >= fMinHeightPx);
+								if (!(widthOk && heightOk)
+									&& (framesLeft[0] > 0)
+									&& (SystemClock.uptimeMillis() < deadline)) {
+									framesLeft[0]--;
+									// Use main handler for retry so it runs even when view is not attached to a window
+									getMainHandler().post(this);
+									return;
+								}
+
+								// Convert to default units (DIP)
+								View unitView = nv;
+								try {
+									View decorView = TiApplication.getAppRootOrCurrentActivity()
+										.getWindow().getDecorView();
+									if (decorView != null) {
+										unitView = decorView;
+									}
+								} catch (Throwable ignored) {
+								}
+								TiDimension dw = new TiDimension(measuredW, TiDimension.TYPE_WIDTH);
+								TiDimension dh = new TiDimension(measuredH, TiDimension.TYPE_HEIGHT);
+								double outW = dw.getAsDefault(unitView);
+								double outH = dh.getAsDefault(unitView);
+
+								KrollDict result = new KrollDict();
+								result.put(TiC.PROPERTY_WIDTH, outW);
+								result.put(TiC.PROPERTY_HEIGHT, outH);
+
+								if (callback != null) {
+									callback.callAsync(getKrollObject(), new Object[] { result });
+								}
+								promise.resolve(result);
+							} catch (Throwable t) {
+								if (callback != null) {
+									KrollDict err = new KrollDict();
+									err.putCodeAndMessage(-1, t.getMessage());
+									callback.callAsync(getKrollObject(), new Object[] { err });
+								}
+								promise.reject(new Throwable(t.getMessage()));
+							}
+						}
+					};
+
+					boolean attached = (nv.getParent() != null);
+					boolean defer = attached && (tiv.isLayoutPending() || nv.isLayoutRequested());
+					if (defer) {
+						nv.post(doMeasure);
+					} else {
+						doMeasure.run();
+					}
+				} catch (Throwable t) {
+					if (callback != null) {
+						KrollDict err = new KrollDict();
+						err.putCodeAndMessage(-1, t.getMessage());
+						callback.callAsync(getKrollObject(), new Object[] { err });
+					}
+					promise.reject(new Throwable(t.getMessage()));
+				}
+			});
+		});
+	}
+
+	/**
+	 * Alias for measure() to keep a unified API name across View and Window.
+	 */
+	@Kroll.method(name = "measureActualDimensions")
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	public KrollPromise<KrollDict> measureActualDimensions(@Kroll.argument(optional = true) KrollDict options,
+		@Kroll.argument(optional = true) KrollFunction callback)
+	{
+		return measure(options, callback);
 	}
 }

@@ -8,6 +8,7 @@
 #import "TiRect.h"
 #import "TiUIView.h"
 #import "TiViewTemplate.h"
+#import <pthread.h>
 
 /**
  Protocol for views that can receive keyboard focus.
@@ -104,7 +105,7 @@ enum {
 
 #pragma mark Parent/Children relationships
   TiViewProxy *parent;
-  dispatch_queue_t childrenQueue;
+  pthread_rwlock_t childrenLock;
   NSMutableArray *children;
   //	NSMutableArray *pendingAdds;
 
@@ -130,7 +131,7 @@ enum {
   // Use parentWillShow and parentWillHide to set this.
 
 #pragma mark Housecleaning that is set and used
-  dispatch_queue_t destroyQueue;
+  NSRecursiveLock *destroyLock;
 
   BOOL windowOpened;
   BOOL windowOpening;
@@ -453,12 +454,6 @@ enum {
  Tells the view proxy to detach its view.
  */
 - (void)detachView;
-
-/**
- Performs a block on the destroy queue, or inline if already executing on it.
- Subclasses should use this instead of raw dispatch_sync(destroyQueue, ...) to avoid deadlocks.
- */
-- (void)performOnDestroyQueue:(dispatch_block_t)block;
 
 - (void)destroy;
 

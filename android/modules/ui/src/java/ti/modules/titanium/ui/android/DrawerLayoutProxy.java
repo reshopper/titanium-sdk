@@ -14,6 +14,7 @@ import org.appcelerator.titanium.TiC;
 import org.appcelerator.titanium.view.TiUIView;
 
 import android.app.Activity;
+import android.view.View;
 import androidx.drawerlayout.widget.DrawerLayout;
 
 @Kroll.proxy(creatableInModule = AndroidModule.class)
@@ -219,7 +220,13 @@ public class DrawerLayoutProxy extends TiViewProxy
 	@Kroll.method
 	public void interceptTouchEvent(TiViewProxy view, Boolean disallowIntercept)
 	{
-		view.getOrCreateView().getOuterView().getParent().requestDisallowInterceptTouchEvent(disallowIntercept);
+		TiUIView uiView = view.getOrCreateView();
+		if (uiView != null) {
+			View outerView = uiView.getOuterView();
+			if (outerView != null && outerView.getParent() != null) {
+				outerView.getParent().requestDisallowInterceptTouchEvent(disallowIntercept);
+			}
+		}
 	}
 
 	@Kroll.getProperty

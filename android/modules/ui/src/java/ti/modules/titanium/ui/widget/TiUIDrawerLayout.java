@@ -471,7 +471,10 @@ public class TiUIDrawerLayout extends TiUIView
 				}
 				newProxy = (TiViewProxy) newValue;
 				initLeft();
-				this.leftFrame.addView(newProxy.getOrCreateView().getOuterView(), index);
+				TiUIView newView = newProxy.getOrCreateView();
+				if (newView != null && newView.getOuterView() != null) {
+					this.leftFrame.addView(newView.getOuterView(), index);
+				}
 			} else {
 				Log.e(TAG, "invalid type for leftView");
 			}
@@ -495,7 +498,10 @@ public class TiUIDrawerLayout extends TiUIView
 				}
 				newProxy = (TiViewProxy) newValue;
 				initRight();
-				this.rightFrame.addView(newProxy.getOrCreateView().getOuterView(), index);
+				TiUIView newView = newProxy.getOrCreateView();
+				if (newView != null && newView.getOuterView() != null) {
+					this.rightFrame.addView(newView.getOuterView(), index);
+				}
 			} else {
 				Log.e(TAG, "invalid type for rightView");
 			}

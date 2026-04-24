@@ -23,6 +23,34 @@
   if ([name caseInsensitiveCompare:@"default"] != NSOrderedSame) { // Default is allowed nil, while still counting as a color to stop inheritance.
     translatedColor = [Webcolor webColorNamed:name];
     if (translatedColor == nil) {
+      // Enhanced logging to provide context about invalid color usage
+      NSString *callerInfo = @"Unknown caller";
+      NSString *elementId = @"N/A";
+
+      // Try to get some context from the call stack
+      NSArray *callStack = [NSThread callStackSymbols];
+      if ([callStack count] > 1) {
+        // Look for Titanium-related frames in the call stack
+        for (NSString *frame in callStack) {
+          if ([frame containsString:@"Ti"] || [frame containsString:@"set"] ||
+              [frame containsString:@"Color"] || [frame containsString:@"Background"]) {
+            // Extract method name for cleaner logging
+            NSRange methodRange = [frame rangeOfString:@"-["];
+            if (methodRange.location != NSNotFound) {
+              NSString *methodPart = [frame substringFromIndex:methodRange.location];
+              NSRange endRange = [methodPart rangeOfString:@"]"];
+              if (endRange.location != NSNotFound) {
+                callerInfo = [methodPart substringToIndex:endRange.location + 1];
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      DebugLog(@"[WARN] Invalid color '%@' used in %@. Color not recognized or malformed.",
+          name ?: @"(null)", callerInfo);
+
       return nil;
     }
   }

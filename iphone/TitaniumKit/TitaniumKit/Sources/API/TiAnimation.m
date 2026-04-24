@@ -24,6 +24,7 @@
 @synthesize zIndex, left, right, top, bottom, width, height;
 @synthesize duration, color, backgroundColor, opacity, opaque, view;
 @synthesize visible, curve, repeat, autoreverse, delay, transform, transition, dampingRatio, springVelocity, bounce;
+@synthesize padding;
 @synthesize animatedView, callback, isReverse, reverseAnimation, resetState;
 
 - (id)initWithDictionary:(NSDictionary *)properties_ context:(id<TiEvaluator>)context_ callback:(KrollCallback *)callback_
@@ -111,6 +112,7 @@
     SET_ID_PROP(transform, properties);
     SET_INT_PROP(transition, properties);
     SET_PROXY_PROP(view, properties);
+    SET_ID_PROP(padding, properties);
 
     if (context_ != nil) {
       callback = [[ListenerEntry alloc] initWithListener:callback_ context:context_ proxy:self];
@@ -161,6 +163,7 @@
   RELEASE_TO_NIL(dampingRatio);
   RELEASE_TO_NIL(springVelocity);
   RELEASE_TO_NIL(bounce);
+  RELEASE_TO_NIL(padding);
   RELEASE_TO_NIL(properties);
   [animatedViewProxy release];
   [super dealloc];
@@ -607,6 +610,11 @@
       if (color != nil && [view_ respondsToSelector:@selector(setColor_:)]) {
         [reverseAnimation setColor:[TiUtils colorValue:[(TiViewProxy *)[(TiUIView *)view_ proxy] valueForKey:@"color"]]];
         [view_ performSelector:@selector(setColor_:) withObject:color];
+      }
+
+      if (padding != nil && [view_ respondsToSelector:@selector(setPadding_:)]) {
+        [reverseAnimation setPadding:[(TiViewProxy *)[(TiUIView *)view_ proxy] valueForKey:@"padding"]];
+        [view_ performSelector:@selector(setPadding_:) withObject:padding];
       }
 
       if (opacity != nil) {

@@ -11,7 +11,11 @@
 
 #import <TitaniumKit/TiUtils.h>
 
-@implementation TiUIScrollViewProxy
+@implementation TiUIScrollViewProxy {
+  @private
+  BOOL canFireScrollStart;
+  BOOL canFireScrollEnd;
+}
 
 static NSArray *scrollViewKeySequence;
 - (NSArray *)keySequence
@@ -30,6 +34,8 @@ static NSArray *scrollViewKeySequence;
   [self initializeProperty:@"zoomScale" defaultValue:NUMFLOAT(1.0)];
   [self initializeProperty:@"canCancelEvents" defaultValue:NUMBOOL(YES)];
   [self initializeProperty:@"scrollingEnabled" defaultValue:NUMBOOL(YES)];
+  canFireScrollEnd = NO;
+  canFireScrollStart = YES;
   [super _initWithProperties:properties];
 }
 
@@ -54,6 +60,36 @@ static NSArray *scrollViewKeySequence;
   return [contentOffset autorelease];
 }
 
+- (id)contentInsets
+{
+  // 1) Return any saved property value immediately (avoids unnecessary view access)
+  id saved = [self valueForUndefinedKey:@"contentInsets"];
+  if (saved != nil) {
+    return saved;
+  }
+
+  // 2) If no view is attached yet, return zero-insets
+  if (![self viewAttached]) {
+    return [TiUtils dictionaryFromEdgeInsets:UIEdgeInsetsZero];
+  }
+
+  // 3) Read current native contentInset on main thread
+  __block NSDictionary *result = nil;
+  TiThreadPerformOnMainThread(
+      ^{
+        UIEdgeInsets insets = [[(TiUIScrollView *)self.view scrollView] contentInset];
+        result = [[TiUtils dictionaryFromEdgeInsets:insets] retain];
+      },
+      YES);
+
+  // Fallback safety
+  if (result == nil) {
+    return [TiUtils dictionaryFromEdgeInsets:UIEdgeInsetsZero];
+  }
+
+  return [result autorelease];
+}
+
 - (void)windowWillOpen
 {
   [super windowWillOpen];
@@ -61,6 +97,16 @@ static NSArray *scrollViewKeySequence;
   // a full layout occurs at least once if view is attached
   if ([self viewAttached]) {
     [self contentsWillChange];
+  }
+
+  // Gendan contentInsets hvis den er gemt som property
+  id savedContentInsets = [self valueForUndefinedKey:@"contentInsets"];
+  if (savedContentInsets) {
+    TiThreadPerformOnMainThread(
+        ^{
+          [(TiUIScrollView *)[self view] setContentInsets_:savedContentInsets withObject:nil];
+        },
+        NO);
   }
 }
 
@@ -331,11 +377,15 @@ static NSArray *scrollViewKeySequence;
   [offset release];
 }
 
-- (void)scrollToBottom:(id)unused
+- (void)scrollToBottom:(id)args
 {
+  id arg1 = args;
+  if ([args isKindOfClass:[NSArray class]]) {
+    arg1 = VALUE_AT_INDEX_OR_NIL(args, 0);
+  }
   TiThreadPerformOnMainThread(
       ^{
-        [(TiUIScrollView *)[self view] scrollToBottom];
+        [(TiUIScrollView *)[self view] scrollToBottom:arg1];
       },
       YES);
 }
@@ -369,6 +419,39 @@ static NSArray *scrollViewKeySequence;
       YES);
 }
 
+- (void)setContentInsets:(id)args
+{
+  ENSURE_UI_THREAD(setContentInsets, args);
+  id arg1;
+  id arg2;
+  if ([args isKindOfClass:[NSDictionary class]]) {
+    arg1 = args;
+    arg2 = nil;
+  } else {
+    arg1 = [args objectAtIndex:0];
+    arg2 = [args count] > 1 ? [args objectAtIndex:1] : nil;
+  }
+
+  // Gem contentInsets som property så den bevares gennem view lifecycle
+  [self replaceValue:arg1 forKey:@"contentInsets" notification:NO];
+
+  [self setContentInsets:arg1 withObject:arg2];
+}
+
+- (void)setContentInsets:(id)value withObject:(id)animated
+{
+  ENSURE_UI_THREAD(setContentInsets, value);
+
+  // Gem contentInsets som property så den bevares gennem view lifecycle
+  [self replaceValue:value forKey:@"contentInsets" notification:NO];
+
+  TiThreadPerformOnMainThread(
+      ^{
+        [[self view] performSelector:@selector(setContentInsets_:withObject:) withObject:value withObject:animated];
+      },
+      YES);
+}
+
 - (void)setZoomScale:(id)args
 {
   id arg1 = args;
@@ -389,14 +472,32 @@ static NSArray *scrollViewKeySequence;
       YES);
 }
 
+- (void)fireScrollEnd:(UIScrollView *)scrollView
+{
+  if (canFireScrollEnd) {
+    canFireScrollEnd = NO;
+    canFireScrollStart = YES;
+    if ([self _hasListeners:@"scrollend"]) {
+      [self fireEvent:@"scrollend" withObject:nil];
+    }
+  }
+}
+
+- (void)fireScrollStart:(UIScrollView *)scrollView
+{
+  if (canFireScrollStart) {
+    canFireScrollStart = NO;
+    canFireScrollEnd = YES;
+    // The user didn't request scrollstart, but it's needed to control scrollend
+  }
+}
+
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView_ // scrolling has ended
 {
   if ([self _hasListeners:@"scrollEnd"]) { // TODO: Deprecate old event.
     [self fireEvent:@"scrollEnd" withObject:nil];
   }
-  if ([self _hasListeners:@"scrollend"]) {
-    [self fireEvent:@"scrollend" withObject:nil];
-  }
+  [self fireScrollEnd:scrollView_];
 }
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView
@@ -430,6 +531,7 @@ static NSArray *scrollViewKeySequence;
 
 - (void)scrollViewWillBeginDragging:(UIScrollView *)scrollView
 {
+  [self fireScrollStart:scrollView];
   CGPoint offset = [scrollView contentOffset];
   NSDictionary *dict = [NSDictionary dictionaryWithObjectsAndKeys:
                                          NUMFLOAT(offset.x), @"x",
@@ -448,6 +550,9 @@ static NSArray *scrollViewKeySequence;
 // listener which tells when dragging ended in the scroll view.
 - (void)scrollViewDidEndDragging:(UIScrollView *)scrollView willDecelerate:(BOOL)decelerate
 {
+  if (!decelerate) {
+    [self fireScrollEnd:scrollView];
+  }
   CGPoint offset = [scrollView contentOffset];
   NSDictionary *dict = [NSDictionary dictionaryWithObjectsAndKeys:
                                          NUMFLOAT(offset.x), @"x",

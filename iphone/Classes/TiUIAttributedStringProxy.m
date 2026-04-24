@@ -11,19 +11,6 @@
 
 @implementation TiUIAttributedStringProxy
 
-+ (TiUIAttributedStringProxy *)fromProperties:(id)arg
-{
-  if ([arg isKindOfClass:[TiUIAttributedStringProxy class]]) {
-    return arg;
-  }
-  if ([arg isKindOfClass:[NSDictionary class]]) {
-    TiUIAttributedStringProxy *asProxy = [[TiUIAttributedStringProxy alloc] init];
-    [asProxy _initWithProperties:arg];
-    return [asProxy autorelease];
-  }
-  return nil;
-}
-
 - (void)_destroy
 {
   RELEASE_TO_NIL(_attributedString)
@@ -253,7 +240,48 @@
   NSRange rangeValue = NSMakeRange(from, length);
 
   if ((from + length) > [_attributedString length]) {
-    DebugLog(@"[WARN] Ti.UI.AttributedString.range must me equal to or smaller than the text length");
+    // Enhanced logging to identify the UI component using this AttributedString
+    NSString *parentInfo = @"Unknown";
+    NSString *parentId = @"N/A";
+
+    // Try to get information about the parent proxy that's using this AttributedString
+    TiProxy *parentProxy = [self parentForBubbling];
+    if (parentProxy != nil) {
+      parentInfo = [parentProxy apiName] ?: @"Unknown";
+
+      // Try to get the ID if it exists
+      id parentIdValue = [parentProxy valueForUndefinedKey:@"id"];
+      if (parentIdValue) {
+        parentId = [TiUtils stringValue:parentIdValue];
+      }
+
+      // Try to get additional identifying information
+      id parentTitle = [parentProxy valueForUndefinedKey:@"title"];
+      id parentText = [parentProxy valueForUndefinedKey:@"text"];
+      id parentValue = [parentProxy valueForUndefinedKey:@"value"];
+
+      NSMutableString *additionalInfo = [NSMutableString string];
+      if (parentTitle) {
+        [additionalInfo appendFormat:@", title: '%.20s'", [[TiUtils stringValue:parentTitle] UTF8String]];
+      }
+      if (parentText) {
+        [additionalInfo appendFormat:@", text: '%.20s'", [[TiUtils stringValue:parentText] UTF8String]];
+      }
+      if (parentValue) {
+        [additionalInfo appendFormat:@", value: '%.20s'", [[TiUtils stringValue:parentValue] UTF8String]];
+      }
+
+      DebugLog(@"[WARN] Ti.UI.AttributedString.range (%ld,%ld) exceeds text length (%ld) for %@ (id: %@%@)",
+          (long)from, (long)length, (long)[_attributedString length],
+          parentInfo, parentId, additionalInfo);
+    } else {
+      // Since AttributedString might not have a direct parent for bubbling,
+      // let's try a different approach to get context information
+      DebugLog(@"[WARN] Ti.UI.AttributedString.range (%ld,%ld) exceeds text length (%ld) - AttributedString text: '%.30s'",
+          (long)from, (long)length, (long)[_attributedString length],
+          [[_attributedString string] UTF8String] ?: "");
+    }
+
     return;
   }
   [attributes addObject:args];

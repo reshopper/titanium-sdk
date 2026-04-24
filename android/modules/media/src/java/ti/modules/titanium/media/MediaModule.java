@@ -37,6 +37,7 @@ import org.appcelerator.titanium.util.TiActivityResultHandler;
 import org.appcelerator.titanium.util.TiActivitySupport;
 import org.appcelerator.titanium.util.TiConvert;
 import org.appcelerator.titanium.util.TiFileHelper;
+import org.appcelerator.titanium.util.TiImageHelper;
 import org.appcelerator.titanium.util.TiIntentWrapper;
 import org.appcelerator.titanium.util.TiUIHelper;
 
@@ -49,7 +50,9 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.ImageDecoder;
 import android.graphics.ImageFormat;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
@@ -240,6 +243,7 @@ public class MediaModule extends KrollModule implements Handler.Callback
 	private static ContentResolver contentResolver;
 	private boolean useCameraX = false;
 	private static boolean pathOnly = false;
+	private static int targetImageSize = 0;
 
 	public MediaModule()
 	{
@@ -420,7 +424,8 @@ public class MediaModule extends KrollModule implements Handler.Callback
 					if (successCallback != null) {
 						TiBaseFile tiFile = TiFileFactory.createTitaniumFile(captureUri.toString(), false);
 						TiBlob blob = TiBlob.blobFromFile(tiFile);
-						KrollDict response = MediaModule.createDictForImage(blob, blob.getMimeType());
+						KrollDict response = MediaModule.createDictForImage(blob, blob.getMimeType(),
+							captureUri.toString());
 						successCallback.callAsync(getKrollObject(), response);
 					}
 				} else if (resultCode == Activity.RESULT_CANCELED) {
@@ -1156,6 +1161,14 @@ public class MediaModule extends KrollModule implements Handler.Callback
 			pathOnly = options.getBoolean(TiC.PROPERTY_PATH_ONLY);
 		}
 
+		targetImageSize = 0;
+		if (options.containsKeyAndNotNull("targetImageSize")) {
+			targetImageSize = options.getInt("targetImageSize");
+			Log.d(TAG, "targetImageSize set to: " + targetImageSize);
+		} else {
+			Log.d(TAG, "targetImageSize not provided in options");
+		}
+
 		final int code = allowMultiple ? PICK_IMAGE_MULTIPLE : PICK_IMAGE_SINGLE;
 
 		activitySupport.launchActivityForResult(galleryIntent.getIntent(), code, new TiActivityResultHandler() {
@@ -1309,7 +1322,7 @@ public class MediaModule extends KrollModule implements Handler.Callback
 		TiBlob imageData = createImageData(new String[] { path }, mimeType);
 
 		// Return a Titanium "CameraMediaItemType" dictionary which wraps the given file.
-		return createDictForImage(imageData, mimeType);
+		return createDictForImage(imageData, mimeType, path);
 	}
 
 	public static TiBlob createImageData(String[] parts, String mimeType)
@@ -1318,6 +1331,11 @@ public class MediaModule extends KrollModule implements Handler.Callback
 	}
 
 	protected static KrollDict createDictForImage(TiBlob imageData, String mimeType)
+	{
+		return createDictForImage(imageData, mimeType, null);
+	}
+
+	protected static KrollDict createDictForImage(TiBlob imageData, String mimeType, String path)
 	{
 		// Create the dictionary.
 		KrollDict d = new KrollDict();
@@ -1361,30 +1379,177 @@ public class MediaModule extends KrollModule implements Handler.Callback
 				}
 			} else if (isVideo) {
 				// Fetch the video file's pixel width and height.
-				String path = null;
+				String videoPath = null;
 				TiFileProxy fileProxy = imageData.getFile();
 				if (fileProxy != null) {
-					path = fileProxy.getNativePath();
+					videoPath = fileProxy.getNativePath();
 				}
-				if (path != null) {
+				if (videoPath != null) {
 					MediaMetadataRetriever retriever = new MediaMetadataRetriever();
 					try {
-						if (path.startsWith("content:")) {
-							retriever.setDataSource(TiApplication.getInstance(), Uri.parse(path));
+						if (videoPath.startsWith("content:")) {
+							retriever.setDataSource(TiApplication.getInstance(), Uri.parse(videoPath));
 						} else {
-							retriever.setDataSource(path);
+							retriever.setDataSource(videoPath);
 						}
 						width = TiConvert.toInt(
 							retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH), width);
 						height = TiConvert.toInt(
 							retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT), height);
 					} catch (Exception ex) {
-						Log.e(TAG, "Failed to acquire dimensions for video: " + path, ex);
+						Log.e(TAG, "Failed to acquire dimensions for video: " + videoPath, ex);
 					} finally {
 						try {
 							retriever.release();
 						} catch (Exception ex) {
 						}
+					}
+				}
+			}
+
+			// Resize image if targetImageSize is set
+			Log.d(TAG, "Resize check: isPhoto=" + isPhoto + ", targetImageSize=" + targetImageSize
+				+ ", width=" + width + ", height=" + height);
+			if (isPhoto && targetImageSize > 0 && width > 0 && height > 0) {
+				// Get image rotation to handle orientation correctly
+				int rotation = 0;
+				try (InputStream orientationStream = imageData.getInputStream()) {
+					rotation = TiImageHelper.getOrientation(orientationStream);
+				} catch (Exception ex) {
+					Log.d(TAG, "Could not determine image orientation, assuming 0", ex);
+				}
+				
+				// For rotated images (90/270 degrees), swap width/height for target size calculation
+				int effectiveWidth = width;
+				int effectiveHeight = height;
+				if (rotation == 90 || rotation == 270) {
+					effectiveWidth = height;
+					effectiveHeight = width;
+				}
+				
+				int maxDimension = Math.max(effectiveWidth, effectiveHeight);
+				Log.d(TAG, "maxDimension=" + maxDimension + ", rotation=" + rotation
+					+ ", will resize=" + (maxDimension != targetImageSize));
+				if (maxDimension != targetImageSize) {
+					float scale = (float) targetImageSize / maxDimension;
+					int newWidth = Math.round(effectiveWidth * scale);
+					int newHeight = Math.round(effectiveHeight * scale);
+					Log.d(TAG, "Resizing from " + effectiveWidth + "x" + effectiveHeight
+						+ " to " + newWidth + "x" + newHeight + " (rotation: " + rotation + ")");
+					
+					try {
+						// Use ImageDecoder for efficient resizing (API 28+)
+						Uri imageUri = null;
+						if (path != null && path.startsWith("content://")) {
+							// Use content URI directly
+							imageUri = Uri.parse(path);
+						} else {
+							// Try to get URI from imageData
+							TiFileProxy fileProxy = imageData.getFile();
+							if (fileProxy != null) {
+								String nativePath = fileProxy.getNativePath();
+								if (nativePath != null && nativePath.startsWith("content://")) {
+									imageUri = Uri.parse(nativePath);
+								}
+							}
+						}
+						
+						if (imageUri != null) {
+							// Use ImageDecoder.setTargetSize() for efficient memory usage
+							// ImageDecoder automatically handles EXIF rotation, so we use the
+							// effective dimensions (already swapped if needed)
+							ContentResolver resolver = TiApplication.getInstance().getContentResolver();
+							ImageDecoder.Source source = ImageDecoder.createSource(resolver, imageUri);
+							Bitmap resizedBitmap = ImageDecoder.decodeBitmap(source, (decoder, info, source1) -> {
+								decoder.setTargetSize(newWidth, newHeight);
+							});
+							
+							if (resizedBitmap != null) {
+								Log.d(TAG, "Created resized bitmap using ImageDecoder: "
+									+ resizedBitmap.getWidth() + "x" + resizedBitmap.getHeight());
+								// Save resized bitmap to temp file to preserve file-based blob behavior
+								File cacheDir = TiApplication.getInstance().getCacheDir();
+								File tempFile = File.createTempFile("resized_", ".jpg", cacheDir);
+								try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile)) {
+									resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 90, fos);
+									fos.flush();
+								}
+								
+								// Copy EXIF data from original image to resized image
+								try (InputStream originalStream = resolver.openInputStream(imageUri)) {
+									if (originalStream != null) {
+										TiImageHelper.copyExifData(originalStream, tempFile.getAbsolutePath(),
+											resizedBitmap.getWidth(), resizedBitmap.getHeight());
+									}
+								} catch (Exception ex) {
+									Log.w(TAG, "Failed to copy EXIF data to resized image: " + ex.getMessage());
+								}
+								
+								Log.d(TAG, "Saved resized image to: " + tempFile.getAbsolutePath());
+								imageData = TiBlob.blobFromFile(
+									TiFileFactory.createTitaniumFile(tempFile.getAbsolutePath(), false));
+								Log.d(TAG, "Created new file-based blob: " + (imageData != null));
+								// ImageDecoder automatically handles EXIF rotation, so the bitmap
+								// dimensions are already correct (upright)
+								width = resizedBitmap.getWidth();
+								height = resizedBitmap.getHeight();
+								resizedBitmap.recycle();
+							}
+						} else {
+							// Fallback: if we don't have a content URI, use BitmapFactory
+							Log.d(TAG, "No content URI available, using BitmapFactory fallback");
+							try (InputStream resizeStream = imageData.getInputStream()) {
+								BitmapFactory.Options opts = new BitmapFactory.Options();
+								opts.inSampleSize = calculateInSampleSize(effectiveWidth, effectiveHeight,
+									newWidth, newHeight);
+								Bitmap originalBitmap = BitmapFactory.decodeStream(resizeStream, null, opts);
+								if (originalBitmap != null) {
+									// Scale to exact size if needed
+									boolean needsScaling = originalBitmap.getWidth() != newWidth
+										|| originalBitmap.getHeight() != newHeight;
+									Bitmap resizedBitmap = needsScaling
+										? Bitmap.createScaledBitmap(originalBitmap, newWidth, newHeight, true)
+										: originalBitmap;
+									
+									// Apply rotation if needed
+									if (rotation != 0 && resizedBitmap != null) {
+										resizedBitmap = TiImageHelper.rotateImage(resizedBitmap, rotation);
+									}
+									
+									if (resizedBitmap != null) {
+										// Save resized bitmap to temp file
+										File cacheDir = TiApplication.getInstance().getCacheDir();
+										File tempFile = File.createTempFile("resized_", ".jpg", cacheDir);
+										try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile)) {
+											resizedBitmap.compress(Bitmap.CompressFormat.JPEG, 90, fos);
+											fos.flush();
+										}
+										
+										// Copy EXIF data from original image to resized image
+										// Get a fresh stream from imageData for EXIF copying
+										try (InputStream originalStreamForExif = imageData.getInputStream()) {
+											TiImageHelper.copyExifData(originalStreamForExif,
+												tempFile.getAbsolutePath(), resizedBitmap.getWidth(),
+												resizedBitmap.getHeight());
+										} catch (Exception ex) {
+											Log.w(TAG, "Failed to copy EXIF data to resized image: " + ex.getMessage());
+										}
+										
+										imageData = TiBlob.blobFromFile(
+											TiFileFactory.createTitaniumFile(tempFile.getAbsolutePath(), false));
+										// Use actual dimensions from rotated bitmap
+										width = resizedBitmap.getWidth();
+										height = resizedBitmap.getHeight();
+										if (resizedBitmap != originalBitmap) {
+											resizedBitmap.recycle();
+										}
+										originalBitmap.recycle();
+									}
+								}
+							}
+						}
+					} catch (Exception ex) {
+						Log.e(TAG, "Failed to resize image.", ex);
 					}
 				}
 			}
@@ -1401,12 +1566,46 @@ public class MediaModule extends KrollModule implements Handler.Callback
 		cropRect.put("width", width);
 		cropRect.put("height", height);
 		d.put("cropRect", cropRect);
-		d.put("path", imageData.getNativePath());
+		String nativePath = imageData.getNativePath();
+		Log.d(TAG, "Final imageData nativePath: " + nativePath);
+		Log.d(TAG, "Final imageData type: " + imageData.getType());
+		d.put("path", nativePath);
 		// Add the blob to the dictionary.
 		if (!pathOnly) {
 			d.put("media", imageData);
+			Log.d(TAG, "Added media blob to dictionary");
 		}
 		return d;
+	}
+
+	/**
+	 * Calculate inSampleSize for BitmapFactory.Options to efficiently decode images.
+	 * @param srcWidth Original image width
+	 * @param srcHeight Original image height
+	 * @param destWidth Target width
+	 * @param destHeight Target height
+	 * @return Sample size (must be power of 2, or 1)
+	 */
+	private static int calculateInSampleSize(int srcWidth, int srcHeight, int destWidth, int destHeight)
+	{
+		if (srcWidth <= 0 || srcHeight <= 0 || destWidth <= 0 || destHeight <= 0) {
+			return 1;
+		}
+		
+		// Calculate the largest sample size that results in dimensions >= target
+		int inSampleSize = 1;
+		if (srcHeight > destHeight || srcWidth > destWidth) {
+			int halfHeight = srcHeight / 2;
+			int halfWidth = srcWidth / 2;
+			
+			// Calculate the largest inSampleSize value that is a power of 2 and keeps both
+			// height and width larger than the requested height and width.
+			while ((halfHeight / inSampleSize) >= destHeight && (halfWidth / inSampleSize) >= destWidth) {
+				inSampleSize *= 2;
+			}
+		}
+		
+		return inSampleSize;
 	}
 
 	KrollDict createDictForImage(int width, int height, byte[] data)

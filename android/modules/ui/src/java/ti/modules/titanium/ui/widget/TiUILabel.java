@@ -343,10 +343,10 @@ public class TiUILabel extends TiUIView
 			boolean hasProperty = false;
 			if (d.containsKey(TiC.PROPERTY_ATTRIBUTED_STRING)) {
 				hasProperty = true;
-				Object attr = d.get(TiC.PROPERTY_ATTRIBUTED_STRING);
-				AttributedStringProxy proxy = AttributedStringProxy.createFromProperties(attr);
-				if (proxy != null) {
-					newText = AttributedStringProxy.toSpannable(proxy, TiApplication.getAppCurrentActivity());
+				Object attributedString = d.get(TiC.PROPERTY_ATTRIBUTED_STRING);
+				if (attributedString instanceof AttributedStringProxy) {
+					newText = AttributedStringProxy.toSpannable(((AttributedStringProxy) attributedString),
+																TiApplication.getAppCurrentActivity());
 				}
 			}
 			if ((newText == null) && d.containsKey(TiC.PROPERTY_HTML)) {
@@ -502,6 +502,10 @@ public class TiUILabel extends TiUIView
 				textFilter = TEXT_FILTER_DEFAULT;
 			}
 		}
+		if (d.containsKey(TiC.PROPERTY_PADDING)) {
+			setTextPadding((HashMap) d.get(TiC.PROPERTY_PADDING));
+		}
+
 		// This needs to be the last operation.
 		updateLabelText();
 		tv.invalidate();
@@ -515,9 +519,9 @@ public class TiUILabel extends TiUIView
 			|| key.equals(TiC.PROPERTY_TITLE)) {
 			CharSequence newText = null;
 			if (key.equals(TiC.PROPERTY_ATTRIBUTED_STRING)) {
-				AttributedStringProxy asProxy = AttributedStringProxy.createFromProperties(newValue);
-				if (asProxy != null) {
-					newText = AttributedStringProxy.toSpannable(asProxy, TiApplication.getAppCurrentActivity());
+				if (newValue instanceof AttributedStringProxy) {
+					newText = AttributedStringProxy.toSpannable((AttributedStringProxy) newValue,
+																TiApplication.getAppCurrentActivity());
 				}
 				if (newText == null) {
 					newText = "";
@@ -655,6 +659,8 @@ public class TiUILabel extends TiUIView
 				textFilter = TEXT_FILTER_DEFAULT;
 			}
 			updateLabelText();
+		} else if (key.equals(TiC.PROPERTY_PADDING)) {
+			setTextPadding((HashMap) newValue);
 		} else {
 			super.propertyChanged(key, oldValue, newValue, proxy);
 		}
@@ -858,5 +864,46 @@ public class TiUILabel extends TiUIView
 		} else {
 			return "";
 		}
+	}
+
+	private void setTextPadding(HashMap<String, Object> d)
+	{
+		MaterialTextView tv = (MaterialTextView) getNativeView();
+		int paddingLeft = 0;
+		int paddingRight = 0;
+		int paddingTop = 0;
+		int paddingBottom = 0;
+
+		if (d != null) {
+			if (d.containsKey(TiC.PROPERTY_LEFT)) {
+				paddingLeft = (int) TiConvert.toTiDimension(
+					TiConvert.toInt(d.get(TiC.PROPERTY_LEFT), 0),
+					TiDimension.TYPE_LEFT)
+					.getAsPixels(tv);
+			}
+
+			if (d.containsKey(TiC.PROPERTY_RIGHT)) {
+				paddingRight = (int) TiConvert.toTiDimension(
+					TiConvert.toInt(d.get(TiC.PROPERTY_RIGHT), 0),
+					TiDimension.TYPE_RIGHT)
+					.getAsPixels(tv);
+			}
+
+			if (d.containsKey(TiC.PROPERTY_TOP)) {
+				paddingTop = (int) TiConvert.toTiDimension(
+					TiConvert.toInt(d.get(TiC.PROPERTY_TOP), 0),
+					TiDimension.TYPE_TOP)
+					.getAsPixels(tv);
+			}
+
+			if (d.containsKey(TiC.PROPERTY_BOTTOM)) {
+				paddingBottom = (int) TiConvert.toTiDimension(
+					TiConvert.toInt(d.get(TiC.PROPERTY_BOTTOM), 0),
+					TiDimension.TYPE_BOTTOM)
+					.getAsPixels(tv);
+			}
+		}
+
+		tv.setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom);
 	}
 }

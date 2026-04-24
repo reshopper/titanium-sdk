@@ -38,7 +38,7 @@ public final class ReferenceTable
 	 * @param object the object to reference and retain
 	 * @return an unique key for this reference
 	 */
-	public static long createReference(Object object)
+	public static synchronized long createReference(Object object)
 	{
 		long key = lastKey++;
 		Log.d(TAG, "Creating strong reference for key: " + key, Log.DEBUG_MODE);
@@ -51,7 +51,7 @@ public final class ReferenceTable
 	 *
 	 * @param key the key for the reference to destroy.
 	 */
-	public static void destroyReference(long key)
+	public static synchronized void destroyReference(long key)
 	{
 		Log.d(TAG, "Destroying reference under key: " + key, Log.DEBUG_MODE);
 		Object obj = getReference(key);
@@ -71,7 +71,7 @@ public final class ReferenceTable
 	 *
 	 * @param key the key for the reference to weaken.
 	 */
-	public static void makeWeakReference(long key)
+	public static synchronized void makeWeakReference(long key)
 	{
 		Log.d(TAG, "Downgrading to weak reference for key: " + key, Log.DEBUG_MODE);
 		Object ref = getReference(key);
@@ -83,7 +83,7 @@ public final class ReferenceTable
 	 *
 	 * @param key the key for the reference to soften.
 	 */
-	public static void makeSoftReference(long key)
+	public static synchronized void makeSoftReference(long key)
 	{
 		Log.d(TAG, "Downgrading to soft reference for key: " + key, Log.DEBUG_MODE);
 		Object ref = getReference(key);
@@ -97,7 +97,7 @@ public final class ReferenceTable
 	 * @param key the key for the reference.
 	 * @return the referenced object if the reference is still valid.
 	 */
-	public static Object clearReference(long key)
+	public static synchronized Object clearReference(long key)
 	{
 		Log.d(TAG, "Upgrading reference to strong for key: " + key, Log.DEBUG_MODE);
 		Object ref = getReference(key);
@@ -112,7 +112,7 @@ public final class ReferenceTable
 	 * @param key the key of the reference.
 	 * @return the object if the reference is still valid, otherwise null.
 	 */
-	public static Object getReference(long key)
+	public static synchronized Object getReference(long key)
 	{
 		Object ref = references.get(key);
 		if (ref instanceof Reference) {
@@ -127,9 +127,10 @@ public final class ReferenceTable
 	 * @param key the key for the reference.
 	 * @return returns true if the reference is strong
 	 */
-	public static boolean isStrongReference(long key)
+	public static synchronized boolean isStrongReference(long key)
 	{
-		Object ref = getReference(key);
+		Object ref = references.get(key);
+		// Don't unwrap weak references - just check the type directly
 		return !(ref instanceof Reference);
 	}
 }

@@ -337,6 +337,17 @@ public class AndroidModule extends KrollModule
 		return String.format("#%06X",
 			(0xFFFFFF & MaterialColors.harmonizeWithPrimary(TiApplication.getAppCurrentActivity(), color)));
 	}
+
+	/**
+	 * Parses a color value into a Ti.UI.Color proxy. Useful to normalize Android behavior
+	 * to return a Color object similar to iOS' fetchSemanticColor.
+	 */
+	@Kroll.method
+	public ColorProxy parseColor(String value)
+	{
+		int colorInt = TiConvert.toColor(value, TiApplication.getAppCurrentActivity());
+		return new ColorProxy(colorInt);
+	}
 	@Kroll.method
 	public void moveToBackground()
 	{

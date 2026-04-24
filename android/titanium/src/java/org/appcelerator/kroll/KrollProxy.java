@@ -10,13 +10,17 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.appcelerator.kroll.annotations.Kroll;
 import org.appcelerator.kroll.common.AsyncResult;
 import org.appcelerator.kroll.common.Log;
 import org.appcelerator.kroll.common.TiMessenger;
+import org.appcelerator.kroll.util.KrollLifecycleTracker;
 import org.appcelerator.titanium.TiApplication;
 import org.appcelerator.titanium.TiBaseActivity;
 import org.appcelerator.titanium.TiC;
@@ -86,8 +90,48 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 	private KrollDict langConversionTable = null;
 	private boolean bubbleParent = true;
 
+	// High performance mode for critical scenarios
+	private boolean highPerformanceMode = false;
+
 	public static final String PROXY_ID_PREFIX = "proxy$";
 	public static final int INVALID_EVENT_LISTENER_ID = -1;
+
+	// Threshold for when to use chunked processing
+	private static final int CHUNKED_PROCESSING_THRESHOLD = 15;
+	// Max properties to process per chunk
+	private static final int CHUNK_SIZE = 8;
+	// Delay between chunks in milliseconds
+	private static final int CHUNK_DELAY_MS = 16; // ~60 FPS
+
+	// Adaptive performance optimization
+	private static int adaptiveThreshold = CHUNKED_PROCESSING_THRESHOLD;
+	private static int adaptiveChunkSize = CHUNK_SIZE;
+	private static long lastProcessingTime = 0;
+	private static int consecutiveFastProcessing = 0;
+	private static int consecutiveSlowProcessing = 0;
+
+	// Cache for UI property determination to avoid repeated string operations
+	private static final Map<String, Boolean> UI_PROPERTY_CACHE = new HashMap<>();
+	private static final Set<String> UI_PROPERTY_NAMES = new HashSet<String>()
+	{
+		{
+			add("visible");
+			add("opacity");
+			add("backgroundColor");
+			add("color");
+			add("text");
+			add("title");
+			add("enabled");
+			add("width");
+			add("height");
+			add("top");
+			add("left");
+			add("right");
+			add("bottom");
+			add("center");
+			add("zIndex");
+		}
+	};
 
 	/**
 	 * The default KrollProxy constructor. Equivalent to <code>KrollProxy("")</code>
@@ -116,6 +160,9 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 		krollObject = object;
 		object.setProxySupport(this);
 		this.creationUrl = creationUrl;
+
+		// Track proxy creation for debugging
+		KrollLifecycleTracker.trackProxyCreated(this);
 
 		// Associate the activity with the proxy.  if the proxy needs activity association delayed until a
 		// later point then initActivity should be overridden to be a no-op and then call setActivity directly
@@ -677,25 +724,254 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 			return;
 		}
 		HashMap props = (HashMap) arg;
-		if (modelListener == null) {
-			for (Object name : props.keySet()) {
-				setProperty(TiConvert.toString(name), props.get(name));
+		
+		// Measure processing time for adaptive optimization
+		long startTime = System.currentTimeMillis();
+		
+		// Use adaptive threshold for better performance tuning
+		int currentThreshold = adaptiveThreshold;
+		
+		// If no listener or small property set, use original logic
+		if (modelListener == null || props.size() < currentThreshold) {
+			applyPropertiesOriginal(props);
+		} else {
+			// Use optimized chunked processing for large property sets
+			if (TiApplication.isUIThread()) {
+				applyPropertiesChunked(props);
+			} else {
+				applyPropertiesOffMainThread(props);
 			}
-			return;
 		}
-		if (TiApplication.isUIThread()) {
-			for (Object key : props.keySet()) {
-				String name = TiConvert.toString(key);
-				Object value = props.get(key);
-				Object current = getProperty(name);
-				setProperty(name, value);
-				if (shouldFireChange(current, value)) {
-					modelListener.propertyChanged(name, current, value, this);
+		
+		// Update adaptive optimization based on processing time
+		updateAdaptiveOptimization(props.size(), startTime);
+	}
+
+	// Update adaptive optimization parameters based on performance
+	private void updateAdaptiveOptimization(int propertyCount, long startTime)
+	{
+		long processingTime = System.currentTimeMillis() - startTime;
+		lastProcessingTime = processingTime;
+		
+		// Adjust thresholds based on performance (only for medium-sized property sets)
+		if (propertyCount >= 5 && propertyCount <= 30) {
+			if (processingTime < 5) { // Very fast processing
+				consecutiveFastProcessing++;
+				consecutiveSlowProcessing = 0;
+				
+				// If consistently fast, we can increase threshold (be less aggressive)
+				if (consecutiveFastProcessing >= 3 && adaptiveThreshold < 25) {
+					adaptiveThreshold++;
+					adaptiveChunkSize = Math.min(adaptiveChunkSize + 1, 12);
+					consecutiveFastProcessing = 0;
+				}
+			} else if (processingTime > 15) { // Slow processing
+				consecutiveSlowProcessing++;
+				consecutiveFastProcessing = 0;
+				
+				// If consistently slow, decrease threshold (be more aggressive)
+				if (consecutiveSlowProcessing >= 2 && adaptiveThreshold > 8) {
+					adaptiveThreshold--;
+					adaptiveChunkSize = Math.max(adaptiveChunkSize - 1, 4);
+					consecutiveSlowProcessing = 0;
+				}
+			}
+		}
+	}
+
+	// Original implementation kept for small property sets
+	private void applyPropertiesOriginal(HashMap props)
+	{
+		if (modelListener == null) {
+			// Even for small sets, deduplicate to avoid unnecessary work
+			for (Object name : props.keySet()) {
+				String propertyName = TiConvert.toString(name);
+				Object newValue = props.get(name);
+				Object currentValue = getProperty(propertyName);
+				
+				// Only set if value has actually changed
+				if (shouldFireChange(currentValue, newValue)) {
+					setProperty(propertyName, newValue);
 				}
 			}
 			return;
 		}
+		
+		if (TiApplication.isUIThread()) {
+			// Use batch processing even for small property sets
+			List<KrollPropertyChange> changes = new ArrayList<>();
+			
+			for (Object key : props.keySet()) {
+				String name = TiConvert.toString(key);
+				Object value = props.get(key);
+				Object current = getProperty(name);
+				
+				// Only process if value has actually changed
+				if (shouldFireChange(current, value)) {
+					setProperty(name, value);
+					changes.add(new KrollPropertyChange(name, current, value));
+				}
+			}
+			
+			// Fire batch changes if any
+			if (!changes.isEmpty()) {
+				fireBatchPropertyChanged(changes);
+			}
+			return;
+		}
 
+		// Off-thread processing with deduplication
+		KrollPropertyChangeSet changes = new KrollPropertyChangeSet(props.size());
+		for (Object key : props.keySet()) {
+			String name = TiConvert.toString(key);
+			Object value = props.get(key);
+			Object current = getProperty(name);
+			
+			// Only process if value has actually changed
+			if (shouldFireChange(current, value)) {
+				setProperty(name, value);
+				changes.addChange(name, current, value);
+			}
+		}
+		if (changes.entryCount > 0) {
+			getMainHandler().obtainMessage(MSG_MODEL_PROPERTY_CHANGE, changes).sendToTarget();
+		}
+	}
+
+	// Chunked processing for UI thread
+	private void applyPropertiesChunked(HashMap props)
+	{
+		// Convert to list for easier chunking
+		List<Map.Entry<Object, Object>> propertyList = new ArrayList<>(props.entrySet());
+		
+		// Pre-filter properties that haven't actually changed
+		propertyList = deduplicateProperties(propertyList);
+		
+		if (propertyList.isEmpty()) {
+			return; // No actual changes to process
+		}
+		
+		// Separate UI-critical properties from others
+		List<Map.Entry<Object, Object>> uiProperties = new ArrayList<>();
+		List<Map.Entry<Object, Object>> regularProperties = new ArrayList<>();
+		
+		for (Map.Entry<Object, Object> entry : propertyList) {
+			String name = TiConvert.toString(entry.getKey());
+			if (isUIRelatedProperty(name)) {
+				uiProperties.add(entry);
+			} else {
+				regularProperties.add(entry);
+			}
+		}
+		
+		// Process UI properties first (immediately)
+		if (!uiProperties.isEmpty()) {
+			processPropertyChunk(uiProperties, 0, uiProperties.size());
+		}
+		
+		// Process regular properties in chunks with delays
+		if (!regularProperties.isEmpty()) {
+			processRegularPropertiesInChunks(regularProperties, 0);
+		}
+	}
+
+	// Remove properties that haven't actually changed
+	private List<Map.Entry<Object, Object>> deduplicateProperties(List<Map.Entry<Object, Object>> propertyList)
+	{
+		List<Map.Entry<Object, Object>> deduplicated = new ArrayList<>();
+		
+		for (Map.Entry<Object, Object> entry : propertyList) {
+			String name = TiConvert.toString(entry.getKey());
+			Object newValue = entry.getValue();
+			Object currentValue = getProperty(name);
+			
+			// Only include properties that have actually changed
+			if (shouldFireChange(currentValue, newValue)) {
+				deduplicated.add(entry);
+			}
+		}
+		
+		return deduplicated;
+	}
+
+	// Process regular properties in chunks with delays
+	private void processRegularPropertiesInChunks(List<Map.Entry<Object, Object>> properties, int startIndex)
+	{
+		if (startIndex >= properties.size()) {
+			return; // All chunks processed
+		}
+		
+		// Use adaptive chunk size for better performance
+		int currentChunkSize = adaptiveChunkSize;
+		int endIndex = Math.min(startIndex + currentChunkSize, properties.size());
+		processPropertyChunk(properties, startIndex, endIndex);
+		
+		// Schedule next chunk
+		if (endIndex < properties.size()) {
+			// In high performance mode, use smaller delays for faster processing
+			int delay = highPerformanceMode ? (CHUNK_DELAY_MS / 2) : CHUNK_DELAY_MS;
+			
+			getMainHandler().postDelayed(new Runnable()
+			{
+				@Override
+				public void run()
+				{
+					processRegularPropertiesInChunks(properties, endIndex);
+				}
+			}, delay);
+		}
+	}
+
+	// Process a chunk of properties
+	private void processPropertyChunk(List<Map.Entry<Object, Object>> properties, int startIndex, int endIndex)
+	{
+		// Batch collect changes to minimize listener calls
+		List<KrollPropertyChange> changes = new ArrayList<>();
+		
+		for (int i = startIndex; i < endIndex; i++) {
+			Map.Entry<Object, Object> entry = properties.get(i);
+			String name = TiConvert.toString(entry.getKey());
+			Object value = entry.getValue();
+			Object current = getProperty(name);
+			setProperty(name, value);
+			if (shouldFireChange(current, value)) {
+				changes.add(new KrollPropertyChange(name, current, value));
+			}
+		}
+		
+		// Fire batch property changes
+		if (!changes.isEmpty()) {
+			fireBatchPropertyChanged(changes);
+		}
+	}
+
+	// Fire batch property changes efficiently
+	private void fireBatchPropertyChanged(List<KrollPropertyChange> changes)
+	{
+		if (modelListener != null) {
+			// For single changes, use direct call
+			if (changes.size() == 1) {
+				KrollPropertyChange change = changes.get(0);
+				modelListener.propertyChanged(change.getName(), change.getOldValue(),
+											change.getNewValue(), this);
+			} else {
+				// For multiple changes, check if listener supports batch processing
+				if (modelListener instanceof BatchPropertyChangeListener) {
+					((BatchPropertyChangeListener) modelListener).propertiesChanged(changes, this);
+				} else {
+					// Fallback to individual calls
+					for (KrollPropertyChange change : changes) {
+						modelListener.propertyChanged(change.getName(), change.getOldValue(),
+													change.getNewValue(), this);
+					}
+				}
+			}
+		}
+	}
+
+	// Off main thread processing with batch model listener calls
+	private void applyPropertiesOffMainThread(HashMap props)
+	{
 		KrollPropertyChangeSet changes = new KrollPropertyChangeSet(props.size());
 		for (Object key : props.keySet()) {
 			String name = TiConvert.toString(key);
@@ -709,6 +985,30 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 		if (changes.entryCount > 0) {
 			getMainHandler().obtainMessage(MSG_MODEL_PROPERTY_CHANGE, changes).sendToTarget();
 		}
+	}
+
+	// Determine if a property requires UI thread processing
+	private boolean isUIRelatedProperty(String propertyName)
+	{
+		// Check cache first
+		Boolean cached = UI_PROPERTY_CACHE.get(propertyName);
+		if (cached != null) {
+			return cached;
+		}
+
+		boolean isUIRelated = UI_PROPERTY_NAMES.contains(propertyName)
+							  || propertyName.startsWith("border")
+							  || propertyName.startsWith("shadow")
+							  || propertyName.startsWith("transform")
+							  || propertyName.endsWith("Color")
+							  || propertyName.endsWith("Image");
+
+		// Cache result (limit cache size to prevent memory leaks)
+		if (UI_PROPERTY_CACHE.size() < 100) {
+			UI_PROPERTY_CACHE.put(propertyName, isUIRelated);
+		}
+
+		return isUIRelated;
 	}
 
 	/**
@@ -1366,6 +1666,74 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 		}
 	}
 
+	/**
+	 * Check if the proxy has listeners for a specific event.
+	 * @param eventName the event name to check.
+	 * @return true if the proxy has listeners for the specified event, false otherwise.
+	 */
+	@Kroll.method
+	public boolean hasListener(String eventName)
+	{
+		if (eventName == null) {
+			return false;
+		}
+		return hasListeners(eventName);
+	}
+
+	/**
+	 * Remove all event listeners for a specific event, or all listeners for all events.
+	 * @param eventName the event name to remove listeners for. If null, removes all listeners for all events.
+	 */
+	@Kroll.method
+	public void removeAllListeners(@Kroll.argument(optional = true) String eventName)
+	{
+		synchronized (eventListeners)
+		{
+			if (eventName == null) {
+				// Remove ALL listeners for ALL events
+				if (!eventListeners.isEmpty()) {
+					if (Log.isDebugModeEnabled()) {
+						Log.d(TAG, "Removing all listeners for all events", Log.DEBUG_MODE);
+					}
+					
+					// Notify JavaScript side for each event type
+					KrollObject krollObject = getKrollObject();
+					if (krollObject != null) {
+						for (String event : eventListeners.keySet()) {
+							krollObject.setHasListenersForEventType(event, false);
+						}
+					}
+					
+					// Clear all listeners
+					eventListeners.clear();
+					setProperty(PROPERTY_HAS_JAVA_LISTENER, false);
+				}
+			} else {
+				// Remove all listeners for specific event
+				HashMap<Integer, KrollEventCallback> listeners = eventListeners.get(eventName);
+				if (listeners != null) {
+					if (Log.isDebugModeEnabled()) {
+						Log.d(TAG, "Removing all listeners for event '" + eventName + "'", Log.DEBUG_MODE);
+					}
+					
+					// Notify JavaScript side
+					KrollObject krollObject = getKrollObject();
+					if (krollObject != null) {
+						krollObject.setHasListenersForEventType(eventName, false);
+					}
+					
+					// Remove listeners for this event
+					listeners.clear();
+					eventListeners.remove(eventName);
+					
+					if (eventListeners.isEmpty()) {
+						setProperty(PROPERTY_HAS_JAVA_LISTENER, false);
+					}
+				}
+			}
+		}
+	}
+
 	public void onEventFired(String event, Object data)
 	{
 		HashMap<Integer, KrollEventCallback> listeners = eventListeners.get(event);
@@ -1410,6 +1778,9 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 	 */
 	public void release()
 	{
+		// Track proxy destruction for debugging
+		KrollLifecycleTracker.trackProxyDestroyed(this);
+		
 		if (eventListeners != null) {
 			eventListeners.clear();
 			eventListeners = null;
@@ -1497,5 +1868,60 @@ public class KrollProxy implements Handler.Callback, KrollProxySupport, OnLifecy
 	 */
 	public void onStop(Activity activity)
 	{
+	}
+
+	/**
+	 * Interface for listeners that can handle batch property changes
+	 */
+	public interface BatchPropertyChangeListener extends KrollProxyListener {
+		void propertiesChanged(List<KrollPropertyChange> changes, KrollProxy proxy);
+	}
+
+	/**
+	 * Enable high performance mode for property setting.
+	 * In this mode, property changes are batched and listener notifications are minimized.
+	 */
+	@Kroll.method
+	public void setHighPerformanceMode(boolean enabled)
+	{
+		this.highPerformanceMode = enabled;
+	}
+
+	@Kroll.method
+	public boolean isHighPerformanceMode()
+	{
+		return highPerformanceMode;
+	}
+
+	/**
+	 * Get current adaptive optimization statistics.
+	 * Useful for debugging and performance monitoring.
+	 */
+	@Kroll.method
+	public HashMap<String, Object> getAdaptiveOptimizationStats()
+	{
+		HashMap<String, Object> stats = new HashMap<>();
+		stats.put("currentThreshold", adaptiveThreshold);
+		stats.put("currentChunkSize", adaptiveChunkSize);
+		stats.put("lastProcessingTime", lastProcessingTime);
+		stats.put("consecutiveFastProcessing", consecutiveFastProcessing);
+		stats.put("consecutiveSlowProcessing", consecutiveSlowProcessing);
+		stats.put("defaultThreshold", CHUNKED_PROCESSING_THRESHOLD);
+		stats.put("defaultChunkSize", CHUNK_SIZE);
+		return stats;
+	}
+
+	/**
+	 * Reset adaptive optimization to default values.
+	 * Useful for testing or when performance characteristics change significantly.
+	 */
+	@Kroll.method
+	public static void resetAdaptiveOptimization()
+	{
+		adaptiveThreshold = CHUNKED_PROCESSING_THRESHOLD;
+		adaptiveChunkSize = CHUNK_SIZE;
+		lastProcessingTime = 0;
+		consecutiveFastProcessing = 0;
+		consecutiveSlowProcessing = 0;
 	}
 }

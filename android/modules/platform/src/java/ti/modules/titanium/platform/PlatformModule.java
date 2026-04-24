@@ -54,6 +54,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.appcelerator.kroll.util.KrollLifecycleTracker;
+
 @Kroll.module
 public class PlatformModule extends KrollModule
 {
@@ -603,6 +605,41 @@ public class PlatformModule extends KrollModule
 	public String getApiName()
 	{
 		return "Ti.Platform";
+	}
+
+	// Debug lifecycle tracking methods
+	@Kroll.method
+	public int getLifecycleProxyCount()
+	{
+		return KrollLifecycleTracker.getLiveProxyCount();
+	}
+
+	@Kroll.method
+	public int getLifecycleViewCount()
+	{
+		return KrollLifecycleTracker.getLiveViewCount();
+	}
+
+	@Kroll.method
+	public void printLifecycleStats()
+	{
+		KrollLifecycleTracker.printStats();
+	}
+
+	@Kroll.method
+	public void resetLifecycleStats()
+	{
+		KrollLifecycleTracker.reset();
+	}
+
+	@Kroll.method
+	public String getViewProxyId(Object view)
+	{
+		if (view instanceof org.appcelerator.titanium.proxy.TiViewProxy) {
+			org.appcelerator.titanium.proxy.TiViewProxy proxy = (org.appcelerator.titanium.proxy.TiViewProxy) view;
+			return proxy.getProxyId();
+		}
+		return null;
 	}
 
 	/**

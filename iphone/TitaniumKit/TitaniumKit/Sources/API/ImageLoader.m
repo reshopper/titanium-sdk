@@ -18,17 +18,6 @@
 #import <mach/mach.h>
 #endif
 
-static void *lockQueueKey = &lockQueueKey;
-
-static inline void ImageLoaderQueuePerform(dispatch_queue_t queue, dispatch_block_t block)
-{
-  if (dispatch_get_specific(lockQueueKey) == lockQueueKey) {
-    block();
-  } else {
-    dispatch_sync(queue, block);
-  }
-}
-
 @interface ImageCacheEntry : NSObject {
   UIImage *fullImage;
   UIImage *stretchableImage;
@@ -335,8 +324,7 @@ DEFINE_EXCEPTIONS
                                              selector:@selector(didReceiveMemoryWarning:)
                                                  name:UIApplicationDidReceiveMemoryWarningNotification
                                                object:nil];
-    lockQueue = dispatch_queue_create("ti.imageloader", DISPATCH_QUEUE_SERIAL);
-    dispatch_queue_set_specific(lockQueue, lockQueueKey, lockQueueKey, NULL);
+    lock = [[NSRecursiveLock alloc] init];
   }
   return self;
 }
@@ -350,8 +338,7 @@ DEFINE_EXCEPTIONS
   RELEASE_TO_NIL(cache);
   RELEASE_TO_NIL(queue);
   RELEASE_TO_NIL(timeout);
-  dispatch_release(lockQueue);
-  lockQueue = nil;
+  RELEASE_TO_NIL(lock);
   [super dealloc];
 }
 
@@ -637,12 +624,12 @@ DEFINE_EXCEPTIONS
   // if have a queue and it's suspend, just throw our request
   // in the timeout queue until we're resumed
   if (queue != nil && [queue isSuspended]) {
-    ImageLoaderQueuePerform(lockQueue, ^{
-      if (timeout == nil) {
-        timeout = [[NSMutableArray alloc] initWithCapacity:4];
-      }
-      [timeout addObject:request];
-    });
+    [lock lock];
+    if (timeout == nil) {
+      timeout = [[NSMutableArray alloc] initWithCapacity:4];
+    }
+    [timeout addObject:request];
+    [lock unlock];
     return request;
   }
 
@@ -653,44 +640,45 @@ DEFINE_EXCEPTIONS
 
 - (void)suspend
 {
-  ImageLoaderQueuePerform(lockQueue, ^{
-    if (queue != nil) {
-      [queue setSuspended:YES];
-    }
-  });
+  [lock lock];
+  if (queue != nil) {
+    [queue setSuspended:YES];
+  }
+  [lock unlock];
 }
 
 - (void)cancel
 {
   // NOTE: this should only be called on suspend
   // to cause the queue to be stopped
-  ImageLoaderQueuePerform(lockQueue, ^{
-    if (queue != nil) {
-      [queue cancelAllOperations];
-    }
-  });
+  [lock lock];
+  if (queue != nil) {
+    [queue cancelAllOperations];
+  }
+  [lock unlock];
 }
 
 - (void)resume
 {
-  ImageLoaderQueuePerform(lockQueue, ^{
-    if (queue != nil) {
-      [queue setSuspended:NO];
-    }
+  [lock lock];
 
-    if (timeout != nil) {
-      for (ImageLoaderRequest *request in timeout) {
-        if ([request cancelled]) {
-          if ([[request delegate] respondsToSelector:@selector(imageLoadCancelled:)]) {
-            [[request delegate] performSelector:@selector(imageLoadCancelled:) withObject:request];
-          }
-        } else {
-          [self doImageLoader:request];
+  if (queue != nil) {
+    [queue setSuspended:NO];
+  }
+
+  if (timeout != nil) {
+    for (ImageLoaderRequest *request in timeout) {
+      if ([request cancelled]) {
+        if ([[request delegate] respondsToSelector:@selector(imageLoadCancelled:)]) {
+          [[request delegate] performSelector:@selector(imageLoadCancelled:) withObject:request];
         }
+      } else {
+        [self doImageLoader:request];
       }
-      [timeout removeAllObjects];
     }
-  });
+    [timeout removeAllObjects];
+  }
+  [lock unlock];
 }
 
 #pragma mark Delegates

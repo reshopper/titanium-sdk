@@ -21,6 +21,7 @@
 
 @interface TiNetworkHTTPClientProxy : TiProxy <APSHTTPRequestDelegate> {
   APSHTTPRequest *httpRequest;
+  NSMutableDictionary *requestHeaders;
   NSTimeInterval _uploadTime;
   NSTimeInterval _downloadTime;
   id<APSConnectionDelegate> apsConnectionDelegate;

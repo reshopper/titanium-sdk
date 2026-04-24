@@ -50,7 +50,8 @@ public class TiUITab extends TiUIView
 		// Assign parent so events bubble up correctly.
 		windowProxy.setParent(proxy);
 
-		return windowProxy.getOrCreateView().getOuterView();
+		TiUIView uiView = windowProxy.getOrCreateView();
+		return uiView != null ? uiView.getOuterView() : null;
 	}
 
 	public TiWindowProxy getWindowProxy()

@@ -64,6 +64,7 @@ public class TiC
 	public static final String EVENT_CHANGE = "change";
 	public static final String EVENT_CLICK = "click";
 	public static final String EVENT_CLOSE = "close";
+	public static final String EVENT_WILL_CLOSE = "willClose";
 	public static final String EVENT_COMPLETE = "complete";
 	public static final String EVENT_DELETE = "delete";
 	public static final String EVENT_DESTROY = "destroy";
@@ -309,6 +310,7 @@ public class TiC
 	public static final String PROPERTY_TRANSITION_NAME = "transitionName";
 	public static final String PROPERTY_BAR_COLOR = "barColor";
 	public static final String PROPERTY_STATUS_BAR_COLOR = "statusBarColor";
+	public static final String PROPERTY_NAVIGATION_BAR_COLOR = "navigationBarColor";
 	public static final String PROPERTY_BASE_URL = "baseUrl";
 	public static final String PROPERTY_BASE_URL_WEBVIEW = "baseURL";
 	public static final String PROPERTY_BIG_TEXT = "bigText";
@@ -365,6 +367,7 @@ public class TiC
 	public static final String PROPERTY_CLASS_NAMES = "classNames";
 	public static final String PROPERTY_CLEAR_ON_EDIT = "clearOnEdit";
 	public static final String PROPERTY_CLIP_VIEWS = "clipViews";
+	public static final String PROPERTY_CLIP_MODE = "clipMode";
 	public static final String PROPERTY_CODE = "code";
 	public static final String PROPERTY_COLOR = "color";
 	public static final String PROPERTY_COLUMNS = "columns";
@@ -375,6 +378,7 @@ public class TiC
 	public static final String PROPERTY_CONTENT_INSET_START_WITH_NAVIGATION = "contentInsetStartWithNavigation";
 	public static final String PROPERTY_CONTENT_INTENT = "contentIntent";
 	public static final String PROPERTY_CONTENT_OFFSET = "contentOffset";
+	public static final String PROPERTY_CONTENT_INSETS = "contentInsets";
 	public static final String PROPERTY_CONTINUOUS_UPDATE = "continuousUpdate";
 	public static final String PROPERTY_PADDING = "padding";
 	public static final String PROPERTY_PADDING_BOTTOM = "paddingBottom";
@@ -403,6 +407,7 @@ public class TiC
 	public static final String PROPERTY_DEFAULT_ITEM_TEMPLATE = "defaultItemTemplate";
 	public static final String PROPERTY_DEFAULTS = "defaults";
 	public static final String PROPERTY_DELAY = "delay";
+	public static final String PROPERTY_DAMPING_RATIO = "dampingRatio";
 	public static final String PROPERTY_DELETE_INTENT = "deleteIntent";
 	public static final String PROPERTY_DEST = "dest";
 	public static final String PROPERTY_DEST_POSITION = "destPosition";
@@ -415,6 +420,7 @@ public class TiC
 	public static final String PROPERTY_DRAWER_INDICATOR_ENABLED = "drawerIndicatorEnabled";
 	public static final String PROPERTY_DRAWER_LOCK_MODE = "drawerLockMode";
 	public static final String PROPERTY_DURATION = "duration";
+	public static final String PROPERTY_SPRING_VELOCITY = "springVelocity";
 	public static final String PROPERTY_EDITABLE = "editable";
 	public static final String PROPERTY_EDITING = "editing";
 	public static final String PROPERTY_ELEVATION = "elevation";
@@ -669,6 +675,7 @@ public class TiC
 	public static final String PROPERTY_PROVIDER = "provider";
 	public static final String PROPERTY_REFERRED_BY = "referredBy";
 	public static final String PROPERTY_REFRESH_CONTROL = "refreshControl";
+	public static final String PROPERTY_REFRESH_CONTROL_OFFSET = "offset";
 	public static final String PROPERTY_REGION = "region";
 	public static final String PROPERTY_REGION1 = "region1";
 	public static final String PROPERTY_REGION2 = "region2";
@@ -872,6 +879,7 @@ public class TiC
 	public static final String PROPERTY_FIXED_SIZE = "fixedSize";
 	public static final String PROPERTY_UI_FLAGS = "uiFlags";
 	public static final String PROPERTY_LAYER_TYPE = "layerType";
+	public static final String PROPERTY_ADAPTIVE_CONTRAST = "adaptiveContrast";
 
 	public static final String SIZE_AUTO = "auto";
 	public static final String URL_APP_PREFIX = "app://";

@@ -19,6 +19,12 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.animation.ValueAnimator;
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.AccelerateDecelerateInterpolator;
+import android.view.animation.AccelerateInterpolator;
+import android.view.animation.LinearInterpolator;
+import android.view.animation.OvershootInterpolator;
 import java.util.HashMap;
 import org.appcelerator.kroll.KrollDict;
 import org.appcelerator.kroll.KrollProxy;
@@ -43,12 +49,14 @@ public class TiUIScrollView extends TiUIView
 	private static final String TAG = "TiUIScrollView";
 
 	private View scrollView;
+	private ValueAnimator scrollAnimator;
 	private TiDimension offsetX = new TiDimension(0, TiDimension.TYPE_LEFT);
 	private TiDimension offsetY = new TiDimension(0, TiDimension.TYPE_TOP);
 	private boolean setInitialOffset = false;
 	private boolean mScrollingEnabled = true;
 	private boolean isScrolling = false;
 	private boolean isTouching = false;
+	private Object pendingContentInsets = null;
 
 	private static int verticalAttrId = -1;
 	private static int horizontalAttrId = -1;
@@ -227,7 +235,17 @@ public class TiUIScrollView extends TiUIView
 						return this.parentContentWidth;
 					}
 				} else if (value instanceof Number) {
-					return ((Number) value).intValue();
+					int type = TiDimension.TYPE_UNDEFINED;
+					if (TiC.PROPERTY_CONTENT_HEIGHT.equals(property)) {
+						type = TiDimension.TYPE_HEIGHT;
+					} else if (TiC.PROPERTY_CONTENT_WIDTH.equals(property)) {
+						type = TiDimension.TYPE_WIDTH;
+					}
+					TiDimension dimension = TiConvert.toTiDimension(value, type);
+					if (dimension != null) {
+						return dimension.getAsPixels(this);
+					}
+					return AUTO;
 				} else {
 					int type = 0;
 					TiDimension dimension;
@@ -319,10 +337,11 @@ public class TiUIScrollView extends TiUIView
 
 			// Apply the "contentWidth" and "contentHeight" sizes to the child instead, if provided.
 			int contentWidth = getContentProperty(TiC.PROPERTY_CONTENT_WIDTH);
+			int contentHeight = getContentProperty(TiC.PROPERTY_CONTENT_HEIGHT);
+
 			if ((contentWidth != AUTO) && (contentWidth >= this.parentContentWidth)) {
 				widthMeasureSpec = MeasureSpec.makeMeasureSpec(contentWidth, MeasureSpec.EXACTLY);
 			}
-			int contentHeight = getContentProperty(TiC.PROPERTY_CONTENT_HEIGHT);
 			if ((contentHeight != AUTO) && (contentHeight >= this.parentContentHeight)) {
 				heightMeasureSpec = MeasureSpec.makeMeasureSpec(contentHeight, MeasureSpec.EXACTLY);
 			}
@@ -377,6 +396,7 @@ public class TiUIScrollView extends TiUIView
 	private class TiVerticalScrollView extends NestedScrollView
 	{
 		private TiScrollViewLayout layout;
+		private Runnable scrollEndRunnable;
 
 		public TiVerticalScrollView(Context context, LayoutArrangement arrangement)
 		{
@@ -496,6 +516,30 @@ public class TiUIScrollView extends TiUIView
 			data.put(TiC.PROPERTY_CONTENT_SIZE, contentSize());
 
 			getProxy().fireEvent(TiC.EVENT_SCROLL, data);
+
+			// Fire scrollend event after scroll stops
+			if (getProxy().hasListeners(TiC.EVENT_SCROLLEND)) {
+				if (scrollEndRunnable != null) {
+					removeCallbacks(scrollEndRunnable);
+				}
+				scrollEndRunnable = new Runnable() {
+					@Override
+					public void run()
+					{
+						// Guard against teardown: proxy may be null after release()
+						TiViewProxy proxy = getProxy();
+						if (proxy != null) {
+							isScrolling = false;
+							KrollDict scrollEndData = new KrollDict();
+							scrollEndData.put(TiC.EVENT_PROPERTY_X, offsetX.getAsDefault(scrollView));
+							scrollEndData.put(TiC.EVENT_PROPERTY_Y, offsetY.getAsDefault(scrollView));
+							scrollEndData.put(TiC.PROPERTY_CONTENT_SIZE, contentSize());
+							proxy.fireEvent(TiC.EVENT_SCROLLEND, scrollEndData);
+						}
+					}
+				};
+				postDelayed(scrollEndRunnable, 200);
+			}
 		}
 
 		@Override
@@ -507,9 +551,9 @@ public class TiUIScrollView extends TiUIView
 			// Store this view's new size, minus the padding.
 			// Must be assigned before calling onMeasure() below.
 			layout.setParentContentWidth(MeasureSpec.getSize(widthMeasureSpec)
-										 - (getPaddingLeft() + getPaddingRight()));
+				- (getPaddingLeft() + getPaddingRight()));
 			layout.setParentContentHeight(MeasureSpec.getSize(heightMeasureSpec)
-										  - (getPaddingTop() + getPaddingBottom()));
+				- (getPaddingTop() + getPaddingBottom()));
 
 			// If the scroll view container has a fixed size (ie: not using AT_MOST/WRAP_CONTENT),
 			// then set up the scrollable content area to be at least the size of the container.
@@ -535,12 +579,16 @@ public class TiUIScrollView extends TiUIView
 				int childHeightMeasureSpec = MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY);
 				child.measure(childWidthMeasureSpec, childHeightMeasureSpec);
 			}
+
+			// Check if we can now apply pending content insets
+			checkAndApplyPendingInsets();
 		}
 	}
 
 	private class TiHorizontalScrollView extends HorizontalScrollView
 	{
 		private TiScrollViewLayout layout;
+		private Runnable scrollEndRunnable;
 
 		public TiHorizontalScrollView(Context context, LayoutArrangement arrangement)
 		{
@@ -631,6 +679,30 @@ public class TiUIScrollView extends TiUIView
 			data.put(TiC.PROPERTY_CONTENT_SIZE, contentSize());
 
 			getProxy().fireEvent(TiC.EVENT_SCROLL, data);
+
+			// Fire scrollend event after scroll stops
+			if (getProxy().hasListeners(TiC.EVENT_SCROLLEND)) {
+				if (scrollEndRunnable != null) {
+					removeCallbacks(scrollEndRunnable);
+				}
+				scrollEndRunnable = new Runnable() {
+					@Override
+					public void run()
+					{
+						// Guard against teardown: proxy may be null after release()
+						TiViewProxy proxy = getProxy();
+						if (proxy != null) {
+							isScrolling = false;
+							KrollDict scrollEndData = new KrollDict();
+							scrollEndData.put(TiC.EVENT_PROPERTY_X, offsetX.getAsDefault(scrollView));
+							scrollEndData.put(TiC.EVENT_PROPERTY_Y, offsetY.getAsDefault(scrollView));
+							scrollEndData.put(TiC.PROPERTY_CONTENT_SIZE, contentSize());
+							proxy.fireEvent(TiC.EVENT_SCROLLEND, scrollEndData);
+						}
+					}
+				};
+				postDelayed(scrollEndRunnable, 200);
+			}
 		}
 
 		@Override
@@ -642,9 +714,9 @@ public class TiUIScrollView extends TiUIView
 			// Store this view's new size, minus the padding.
 			// Must be assigned before calling onMeasure() below.
 			layout.setParentContentWidth(MeasureSpec.getSize(widthMeasureSpec)
-										 - (getPaddingLeft() + getPaddingRight()));
+				- (getPaddingLeft() + getPaddingRight()));
 			layout.setParentContentHeight(MeasureSpec.getSize(heightMeasureSpec)
-										  - (getPaddingTop() + getPaddingBottom()));
+				- (getPaddingTop() + getPaddingBottom()));
 
 			// If the scroll view container has a fixed size (ie: not using AT_MOST/WRAP_CONTENT),
 			// then set up the scrollable content area to be at least the size of the container.
@@ -670,6 +742,9 @@ public class TiUIScrollView extends TiUIView
 				int childWidthMeasureSpec = MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY);
 				child.measure(childWidthMeasureSpec, childHeightMeasureSpec);
 			}
+
+			// Check if we can now apply pending content insets
+			checkAndApplyPendingInsets();
 		}
 	}
 
@@ -695,6 +770,11 @@ public class TiUIScrollView extends TiUIView
 	@Override
 	public void release()
 	{
+		// Cancel ongoing scroll animation if any
+		if (scrollAnimator != null) {
+			scrollAnimator.cancel();
+			scrollAnimator = null;
+		}
 		// If a refresh control is currently assigned, then detach it.
 		View nativeView = getNativeView();
 		if (nativeView instanceof TiSwipeRefreshLayout) {
@@ -745,6 +825,111 @@ public class TiUIScrollView extends TiUIView
 		}
 	}
 
+	/**
+	 * Set content insets from dictionary.
+	 *
+	 * @param hashMap Dictionary containing top, left, bottom, right insets.
+	 */
+	public void setContentInsets(Object hashMap)
+	{
+		if (hashMap instanceof HashMap) {
+			KrollDict contentInsets = new KrollDict((HashMap) hashMap);
+			View view = this.scrollView;
+
+			// Always store in proxy for persistence across view lifecycle
+			getProxy().setProperty(TiC.PROPERTY_CONTENT_INSETS, hashMap);
+
+			if (view != null && (view.getWidth() > 0 || view.getHeight() > 0
+				|| view.getMeasuredWidth() > 0 || view.getMeasuredHeight() > 0)) {
+				int paddingLeft = view.getPaddingLeft();
+				int paddingTop = view.getPaddingTop();
+				int paddingRight = view.getPaddingRight();
+				int paddingBottom = view.getPaddingBottom();
+
+				if (contentInsets.containsKeyAndNotNull(TiC.PROPERTY_LEFT)) {
+					paddingLeft = TiConvert.toTiDimension(contentInsets, TiC.PROPERTY_LEFT, TiDimension.TYPE_LEFT)
+						.getAsPixels(view);
+				}
+				if (contentInsets.containsKeyAndNotNull(TiC.PROPERTY_TOP)) {
+					paddingTop = TiConvert.toTiDimension(contentInsets, TiC.PROPERTY_TOP, TiDimension.TYPE_TOP)
+						.getAsPixels(view);
+				}
+				if (contentInsets.containsKeyAndNotNull(TiC.PROPERTY_RIGHT)) {
+					paddingRight = TiConvert.toTiDimension(contentInsets, TiC.PROPERTY_RIGHT, TiDimension.TYPE_RIGHT)
+						.getAsPixels(view);
+				}
+				if (contentInsets.containsKeyAndNotNull(TiC.PROPERTY_BOTTOM)) {
+					paddingBottom = TiConvert.toTiDimension(contentInsets, TiC.PROPERTY_BOTTOM, TiDimension.TYPE_BOTTOM)
+						.getAsPixels(view);
+				}
+
+				// Validate padding values to prevent them from being larger than the view
+				int maxWidth = view.getMeasuredWidth() > 0 ? view.getMeasuredWidth() : view.getWidth();
+				int maxHeight = view.getMeasuredHeight() > 0 ? view.getMeasuredHeight() : view.getHeight();
+
+				if (maxWidth > 0 && (paddingLeft + paddingRight) >= maxWidth) {
+					paddingLeft = maxWidth / 4; // Use 25% of width
+					paddingRight = maxWidth / 4;
+				}
+
+				if (maxHeight > 0 && (paddingTop + paddingBottom) >= maxHeight) {
+					paddingTop = maxHeight / 4; // Use 25% of height
+					paddingBottom = maxHeight / 4;
+				}
+
+				view.setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom);
+
+				// Set clipChildren to false to prevent content clipping when using insets
+				if (view instanceof ViewGroup) {
+					((ViewGroup) view).setClipChildren(false);
+					((ViewGroup) view).setClipToPadding(false);
+				}
+
+				// Also apply to the layout if it's a scroll view with internal layout
+				TiScrollViewLayout layout = getLayout();
+				if (layout != null) {
+					layout.setClipChildren(false);
+					layout.setClipToPadding(false);
+				}
+
+				// Force layout update to ensure insets are applied immediately
+				view.requestLayout();
+				if (layout != null) {
+					layout.requestLayout();
+				}
+
+				// Clear any pending insets since we've successfully applied them
+				pendingContentInsets = null;
+			} else {
+				// Store insets for later application when view is ready
+				pendingContentInsets = hashMap;
+			}
+		} else {
+			Log.e(TAG, "ContentInsets must be an instance of HashMap");
+		}
+	}
+
+	public KrollDict getContentInsets()
+	{
+		View view = this.scrollView;
+		if (view == null) {
+			return new KrollDict();
+		}
+		KrollDict d = new KrollDict();
+
+		// Convert pixel values back to DIP using TiDimension
+		TiDimension leftDimension = new TiDimension(view.getPaddingLeft(), TiDimension.TYPE_LEFT);
+		TiDimension topDimension = new TiDimension(view.getPaddingTop(), TiDimension.TYPE_TOP);
+		TiDimension rightDimension = new TiDimension(view.getPaddingRight(), TiDimension.TYPE_RIGHT);
+		TiDimension bottomDimension = new TiDimension(view.getPaddingBottom(), TiDimension.TYPE_BOTTOM);
+
+		d.put(TiC.PROPERTY_LEFT, leftDimension.getAsDefault(view));
+		d.put(TiC.PROPERTY_TOP, topDimension.getAsDefault(view));
+		d.put(TiC.PROPERTY_RIGHT, rightDimension.getAsDefault(view));
+		d.put(TiC.PROPERTY_BOTTOM, bottomDimension.getAsDefault(view));
+		return d;
+	}
+
 	@Override
 	public void propertyChanged(String key, Object oldValue, Object newValue, KrollProxy proxy)
 	{
@@ -763,6 +948,8 @@ public class TiUIScrollView extends TiUIView
 			} else if (view instanceof TiVerticalScrollView) {
 				((TiVerticalScrollView) view).getLayout().setCanCancelEvents(canCancelEvents);
 			}
+		} else if (key.equals(TiC.PROPERTY_CONTENT_INSETS)) {
+			setContentInsets(newValue);
 		} else if (TiC.PROPERTY_SCROLLING_ENABLED.equals(key)) {
 			setScrollingEnabled(newValue);
 		} else if (TiC.PROPERTY_REFRESH_CONTROL.equals(key)) {
@@ -946,6 +1133,20 @@ public class TiUIScrollView extends TiUIView
 		this.scrollView.setHorizontalScrollBarEnabled(showHorizontalScrollBar);
 		this.scrollView.setVerticalScrollBarEnabled(showVerticalScrollBar);
 
+		// Apply contentInsets if set as property (for persistence like iOS)
+		if (d.containsKey(TiC.PROPERTY_CONTENT_INSETS)) {
+			setContentInsets(d.get(TiC.PROPERTY_CONTENT_INSETS));
+		} else {
+			// Check if contentInsets were stored earlier due to timing issues
+			Object storedInsets = getProxy().getProperty(TiC.PROPERTY_CONTENT_INSETS);
+			if (storedInsets != null) {
+				setContentInsets(storedInsets);
+			}
+		}
+
+		// Check if we can apply any pending insets now that view is created
+		checkAndApplyPendingInsets();
+
 		super.processProperties(d);
 	}
 
@@ -958,6 +1159,28 @@ public class TiUIScrollView extends TiUIView
 			return ((TiHorizontalScrollView) nativeView).layout;
 		}
 		return null;
+	}
+
+	/**
+	 * Check if view is ready and apply any pending content insets
+	 */
+	private void checkAndApplyPendingInsets()
+	{
+		// First check pending insets, then fall back to proxy-stored insets
+		Object insetsToApply = pendingContentInsets;
+		if (insetsToApply == null) {
+			insetsToApply = getProxy().getProperty(TiC.PROPERTY_CONTENT_INSETS);
+		}
+
+		if (insetsToApply != null && scrollView != null) {
+			// Check if view has valid dimensions
+			if (scrollView.getWidth() > 0 || scrollView.getHeight() > 0
+				|| scrollView.getMeasuredWidth() > 0 || scrollView.getMeasuredHeight() > 0) {
+
+				// Apply the insets
+				setContentInsets(insetsToApply);
+			}
+		}
 	}
 
 	@Override
@@ -1014,6 +1237,134 @@ public class TiUIScrollView extends TiUIView
 		view.computeScroll();
 	}
 
+	public void scrollTo(int x, int y, boolean smoothScroll, int duration)
+	{
+		// If no duration provided or negative, fallback to existing behavior
+		if (duration <= 0) {
+			scrollTo(x, y, smoothScroll);
+			return;
+		}
+
+		final View view = this.scrollView;
+		if (view == null) {
+			return;
+		}
+
+		// Convert target coordinates to pixels relative to the view
+		final int targetX = TiConvert.toTiDimension(x, -1).getAsPixels(view);
+		final int targetY = TiConvert.toTiDimension(y, -1).getAsPixels(view);
+
+		// Determine current scroll positions
+		final int startX = (view instanceof HorizontalScrollView) ? ((HorizontalScrollView) view).getScrollX()
+			: (view instanceof TiVerticalScrollView ? ((TiVerticalScrollView) view).getScrollX() : view.getScrollX());
+		final int startY = (view instanceof TiVerticalScrollView) ? ((TiVerticalScrollView) view).getScrollY()
+			: (view instanceof HorizontalScrollView ? ((HorizontalScrollView) view).getScrollY() : view.getScrollY());
+
+		// Cancel any ongoing animation
+		if (scrollAnimator != null) {
+			scrollAnimator.cancel();
+			scrollAnimator = null;
+		}
+
+		// Edge case: if start == target, nothing to animate
+		if (startX == targetX && startY == targetY) {
+			return;
+		}
+
+		// Create animator from 0..1 and interpolate between start and target
+		scrollAnimator = ValueAnimator.ofFloat(0f, 1f);
+		scrollAnimator.setDuration(duration);
+		scrollAnimator.setInterpolator(new DecelerateInterpolator());
+		scrollAnimator.addUpdateListener(animation -> {
+			float fraction = (Float) animation.getAnimatedValue();
+			int currX = startX + Math.round((targetX - startX) * fraction);
+			int currY = startY + Math.round((targetY - startY) * fraction);
+
+			if (view instanceof TiHorizontalScrollView) {
+				((TiHorizontalScrollView) view).scrollTo(currX, currY);
+			} else if (view instanceof TiVerticalScrollView) {
+				((TiVerticalScrollView) view).scrollTo(currX, currY);
+			} else {
+				view.scrollTo(currX, currY);
+			}
+			view.computeScroll();
+		});
+		scrollAnimator.start();
+	}
+
+	public void scrollTo(int x, int y, boolean smoothScroll, int duration, Integer curve)
+	{
+		if (duration <= 0 && curve == null) {
+			scrollTo(x, y, smoothScroll);
+			return;
+		}
+
+		final View view = this.scrollView;
+		if (view == null) {
+			return;
+		}
+
+		final int targetX = TiConvert.toTiDimension(x, -1).getAsPixels(view);
+		final int targetY = TiConvert.toTiDimension(y, -1).getAsPixels(view);
+
+		final int startX = (view instanceof HorizontalScrollView) ? ((HorizontalScrollView) view).getScrollX()
+			: (view instanceof TiVerticalScrollView ? ((TiVerticalScrollView) view).getScrollX() : view.getScrollX());
+		final int startY = (view instanceof TiVerticalScrollView) ? ((TiVerticalScrollView) view).getScrollY()
+			: (view instanceof HorizontalScrollView ? ((HorizontalScrollView) view).getScrollY() : view.getScrollY());
+
+		if (scrollAnimator != null) {
+			scrollAnimator.cancel();
+			scrollAnimator = null;
+		}
+
+		if (startX == targetX && startY == targetY) {
+			return;
+		}
+
+		scrollAnimator = ValueAnimator.ofFloat(0f, 1f);
+		if (duration > 0) {
+			scrollAnimator.setDuration(duration);
+		}
+		// Map common Titanium curves to Android interpolators
+		if (curve != null) {
+			switch (curve.intValue()) {
+				case 0: // linear
+					scrollAnimator.setInterpolator(new LinearInterpolator());
+					break;
+				case 1: // ease-in
+					scrollAnimator.setInterpolator(new AccelerateInterpolator());
+					break;
+				case 2: // ease-out
+					scrollAnimator.setInterpolator(new DecelerateInterpolator());
+					break;
+				case 3: // ease-in-out
+					scrollAnimator.setInterpolator(new AccelerateDecelerateInterpolator());
+					break;
+				case 4: // ease-out-back/overshoot
+					scrollAnimator.setInterpolator(new OvershootInterpolator());
+					break;
+				default:
+					scrollAnimator.setInterpolator(new AccelerateDecelerateInterpolator());
+			}
+		}
+
+		scrollAnimator.addUpdateListener(animation -> {
+			float fraction = (Float) animation.getAnimatedValue();
+			int currX = startX + Math.round((targetX - startX) * fraction);
+			int currY = startY + Math.round((targetY - startY) * fraction);
+
+			if (view instanceof TiHorizontalScrollView) {
+				((TiHorizontalScrollView) view).scrollTo(currX, currY);
+			} else if (view instanceof TiVerticalScrollView) {
+				((TiVerticalScrollView) view).scrollTo(currX, currY);
+			} else {
+				view.scrollTo(currX, currY);
+			}
+			view.computeScroll();
+		});
+		scrollAnimator.start();
+	}
+
 	public void scrollToBottom(boolean animated)
 	{
 		View view = this.scrollView;
@@ -1058,8 +1409,23 @@ public class TiUIScrollView extends TiUIView
 
 	private KrollDict contentSize()
 	{
-		TiDimension dimensionWidth = new TiDimension(getLayout().getMeasuredWidth(), TiDimension.TYPE_WIDTH);
-		TiDimension dimensionHeight = new TiDimension(getLayout().getMeasuredHeight(), TiDimension.TYPE_HEIGHT);
+		// Guard against null layout during teardown (eg. after release()).
+		TiScrollViewLayout layout = getLayout();
+		int measuredWidth = 0;
+		int measuredHeight = 0;
+		if (layout != null) {
+			measuredWidth = layout.getMeasuredWidth();
+			measuredHeight = layout.getMeasuredHeight();
+		} else {
+			// Fallback to native view if available; otherwise default to 0.
+			View nativeView = getNativeView();
+			if (nativeView != null) {
+				measuredWidth = nativeView.getMeasuredWidth();
+				measuredHeight = nativeView.getMeasuredHeight();
+			}
+		}
+		TiDimension dimensionWidth = new TiDimension(measuredWidth, TiDimension.TYPE_WIDTH);
+		TiDimension dimensionHeight = new TiDimension(measuredHeight, TiDimension.TYPE_HEIGHT);
 		double contentWidth = dimensionWidth.getAsDefault(getNativeView());
 		double contentHeight = dimensionHeight.getAsDefault(getNativeView());
 

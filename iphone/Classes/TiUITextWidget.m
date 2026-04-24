@@ -42,11 +42,9 @@
 - (void)setAttributedString_:(id)arg
 {
 #ifdef USE_TI_UIATTRIBUTEDSTRING
-  TiUIAttributedStringProxy *as = [TiUIAttributedStringProxy fromProperties:arg];
-  if (as) {
-    [[self proxy] replaceValue:as forKey:@"attributedString" notification:NO];
-    [(id)[self textWidgetView] setAttributedText:[as attributedString]];
-  }
+  ENSURE_SINGLE_ARG(arg, TiUIAttributedStringProxy);
+  [[self proxy] replaceValue:arg forKey:@"attributedString" notification:NO];
+  [(id)[self textWidgetView] setAttributedText:[arg attributedString]];
 #endif
 }
 

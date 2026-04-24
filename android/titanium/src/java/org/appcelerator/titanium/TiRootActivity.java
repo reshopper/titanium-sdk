@@ -63,6 +63,7 @@ public class TiRootActivity extends TiLaunchActivity implements TiActivitySuppor
 	private int runtimeStartedListenerId = KrollProxy.INVALID_EVENT_LISTENER_ID;
 	private boolean wasRuntimeStarted;
 	private boolean isDuplicateInstance;
+	private Intent pendingNewIntent;
 
 	static
 	{
@@ -327,13 +328,13 @@ public class TiRootActivity extends TiLaunchActivity implements TiActivitySuppor
 		tiApp.setRootActivity(this);
 		super.onCreate(savedInstanceState);
 
-		// Invoke activity's onNewIntent() behavior if above code bundled an extra intent into it.
-		// This happens if activity was initially created with a non-main launcher intent, such as a URL scheme.
+		// If we were launched with a non-main launcher intent (e.g. URL scheme),
+		// defer handling until window is ready to avoid SplashScreen attach races on Android 12+.
 		if (isNotRestoringActivity && (newIntent != null) && newIntent.hasExtra(TiC.EXTRA_TI_NEW_INTENT)) {
 			try {
 				Object object = newIntent.getParcelableExtra(TiC.EXTRA_TI_NEW_INTENT);
 				if (object instanceof Intent) {
-					onNewIntent((Intent) object);
+					this.pendingNewIntent = (Intent) object;
 				}
 			} catch (Exception ex) {
 				Log.e(TAG, "Failed to parse: " + TiC.EXTRA_TI_NEW_INTENT, ex);
@@ -344,6 +345,39 @@ public class TiRootActivity extends TiLaunchActivity implements TiActivitySuppor
 		// Adding the following listener prevents the splash from being dismissed.
 		if (Build.VERSION.SDK_INT >= 31) {
 			getSplashScreen().setOnExitAnimationListener((splashView) -> {});
+		}
+	}
+
+	@Override
+	protected void onPostResume()
+	{
+		super.onPostResume();
+		dispatchPendingNewIntentIfReady();
+	}
+
+	private void dispatchPendingNewIntentIfReady()
+	{
+		if (this.pendingNewIntent == null) {
+			return;
+		}
+
+		Window window = getWindow();
+		if (window != null && window.peekDecorView() != null) {
+			final Intent intent = this.pendingNewIntent;
+			this.pendingNewIntent = null;
+			try {
+				onNewIntent(intent);
+			} catch (Exception ex) {
+				Log.e(TAG, "Failed handling pending new intent", ex);
+			}
+		} else {
+			new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+				@Override
+				public void run()
+				{
+					dispatchPendingNewIntentIfReady();
+				}
+			}, 16);
 		}
 	}
 

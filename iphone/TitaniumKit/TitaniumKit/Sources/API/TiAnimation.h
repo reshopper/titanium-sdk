@@ -85,6 +85,7 @@
   TiViewProxy *animatedViewProxy;
   NSNumber *dampingRatio;
   NSNumber *springVelocity;
+  id padding;
 
   NSDictionary *properties;
 
@@ -140,6 +141,7 @@
 @property (nonatomic, retain, readwrite) NSNumber *dampingRatio;
 @property (nonatomic, retain, readwrite) NSNumber *springVelocity;
 @property (nonatomic, retain, readwrite) NSNumber *bounce;
+@property (nonatomic, retain, readwrite) id padding;
 
 + (TiAnimation *)animationFromArg:(id)args context:(id<TiEvaluator>)context create:(BOOL)yn;
 

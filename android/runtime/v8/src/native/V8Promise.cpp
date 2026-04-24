@@ -64,11 +64,19 @@ JNIEXPORT void JNICALL Java_org_appcelerator_kroll_runtime_v8_V8Promise_nativeRe
 		return;
 	}
 
-	auto persistent = TypeConverter::resolvers.at(ptr);
+	auto it2 = TypeConverter::resolvers.find(ptr);
+	if (it2 == TypeConverter::resolvers.end()) {
+		LOGE(TAG, "Resolver entry disappeared before resolve.");
+		return;
+	}
+	auto persistent = it2->second;
 	auto resolver = persistent.Get(V8Runtime::v8_isolate);
 
 	Maybe<bool> b = resolver->Resolve(V8Runtime::v8_isolate->GetCurrentContext(), TypeConverter::javaObjectToJsValue(V8Runtime::v8_isolate, arg));
 	LOGD(TAG, "Promise nativeReject resolver->Resolve %s", b.FromMaybe(false) ? "true" : "false");
+	// Release resolver after resolve to avoid stale/double-resolve
+	persistent.Reset();
+	TypeConverter::resolvers.erase(it2);
 }
 
 JNIEXPORT void JNICALL Java_org_appcelerator_kroll_runtime_v8_V8Promise_nativeReject(
@@ -84,11 +92,19 @@ JNIEXPORT void JNICALL Java_org_appcelerator_kroll_runtime_v8_V8Promise_nativeRe
 		return;
 	}
 
-	auto persistent = TypeConverter::resolvers.at(ptr);
+	auto it2 = TypeConverter::resolvers.find(ptr);
+	if (it2 == TypeConverter::resolvers.end()) {
+		LOGE(TAG, "Resolver entry disappeared before reject.");
+		return;
+	}
+	auto persistent = it2->second;
 	auto resolver = persistent.Get(V8Runtime::v8_isolate);
 
 	Maybe<bool> b = resolver->Reject(V8Runtime::v8_isolate->GetCurrentContext(), TypeConverter::javaObjectToJsValue(V8Runtime::v8_isolate, arg));
 	LOGD(TAG, "Promise nativeReject resolver->Reject %s", b.FromMaybe(false) ? "true" : "false");
+	// Release resolver after reject to avoid stale/double-resolve
+	persistent.Reset();
+	TypeConverter::resolvers.erase(it2);
 }
 
 JNIEXPORT jboolean JNICALL

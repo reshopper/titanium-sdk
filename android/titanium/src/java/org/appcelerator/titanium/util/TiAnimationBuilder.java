@@ -48,6 +48,10 @@ import android.animation.ValueAnimator;
 
 import ti.modules.titanium.ui.widget.TiUILabel;
 
+import androidx.dynamicanimation.animation.DynamicAnimation;
+import androidx.dynamicanimation.animation.SpringAnimation;
+import androidx.dynamicanimation.animation.SpringForce;
+
 /**
  * Builds and starts animations. When possible, "Property Animators" are used.
  * The only time Property Animators are not used -- i.e., the only time
@@ -108,13 +112,16 @@ public class TiAnimationBuilder
 	protected float elevation = -1;
 	protected Ti2DMatrix tdm = null;
 	protected Double delay = null;
+	protected Double dampingRatio = null;
 	protected Double duration = null;
+	protected Double springVelocity = null;
 	protected Double toOpacity = null;
 	protected Double repeat = null;
 	protected Boolean autoreverse = null;
 	protected String top = null, bottom = null, left = null, right = null;
 	protected String centerX = null, centerY = null;
 	protected String width = null, height = null;
+	protected String paddingLeft = null, paddingRight = null, paddingTop = null, paddingBottom = null;
 	protected Integer backgroundColor = null;
 	protected Integer color = null;
 	protected float rotationY, rotationX = -1;
@@ -129,6 +136,13 @@ public class TiAnimationBuilder
 	protected AnimatorHelper animatorHelper;
 	protected TiViewProxy viewProxy;
 	protected AnimatorSet animatorSet;
+	protected List<SpringAnimation> springAnimations;
+
+	// Temporary hardware layer promotion tracking for smoother alpha/transform animations
+	private boolean promotedHardwareLayer = false;
+	private int previousLayerType = View.LAYER_TYPE_NONE;
+	// Track if we set transient state to ensure proper cleanup
+	private boolean hasTransientState = false;
 
 	public TiAnimationBuilder()
 	{
@@ -161,8 +175,20 @@ public class TiAnimationBuilder
 			delay = TiConvert.toDouble(options, TiC.PROPERTY_DELAY);
 		}
 
+		if (options.containsKey(TiC.PROPERTY_DAMPING_RATIO)) {
+			dampingRatio = TiConvert.toDouble(options, TiC.PROPERTY_DAMPING_RATIO);
+			if (dampingRatio != null) {
+				// Clamp to [0,1] like iOS docs
+				dampingRatio = Math.max(0.0d, Math.min(1.0d, dampingRatio));
+			}
+		}
+
 		if (options.containsKey(TiC.PROPERTY_DURATION)) {
 			duration = TiConvert.toDouble(options, TiC.PROPERTY_DURATION);
+		}
+
+		if (options.containsKey(TiC.PROPERTY_SPRING_VELOCITY)) {
+			springVelocity = TiConvert.toDouble(options, TiC.PROPERTY_SPRING_VELOCITY);
 		}
 
 		this.curve = TiAnimationBuilder.DEFAULT_CURVE;
@@ -251,6 +277,26 @@ public class TiAnimationBuilder
 		if (options.containsKey(TiC.PROPERTY_ROTATION_X)) {
 			rotationX = TiConvert.toFloat(options, TiC.PROPERTY_ROTATION_X, -1);
 		}
+
+		if (options.containsKey(TiC.PROPERTY_PADDING)) {
+			Object paddingObj = options.get(TiC.PROPERTY_PADDING);
+			if (paddingObj instanceof HashMap) {
+				HashMap paddingMap = (HashMap) paddingObj;
+				if (paddingMap.containsKey(TiC.PROPERTY_LEFT)) {
+					paddingLeft = TiConvert.toString(paddingMap.get(TiC.PROPERTY_LEFT));
+				}
+				if (paddingMap.containsKey(TiC.PROPERTY_RIGHT)) {
+					paddingRight = TiConvert.toString(paddingMap.get(TiC.PROPERTY_RIGHT));
+				}
+				if (paddingMap.containsKey(TiC.PROPERTY_TOP)) {
+					paddingTop = TiConvert.toString(paddingMap.get(TiC.PROPERTY_TOP));
+				}
+				if (paddingMap.containsKey(TiC.PROPERTY_BOTTOM)) {
+					paddingBottom = TiConvert.toString(paddingMap.get(TiC.PROPERTY_BOTTOM));
+				}
+			}
+		}
+
 		this.options = options;
 	}
 
@@ -343,6 +389,26 @@ public class TiAnimationBuilder
 					ObjectAnimator.ofInt((TextView) lblView.getNativeView(), "textColor", currentColor, color);
 				colAnimator.setEvaluator(new ArgbEvaluator());
 				addAnimator(animators, colAnimator);
+			}
+		}
+
+		// Direct translationX / translationY support via Ti.UI.Animation
+		if (options != null) {
+			if (options.containsKey(TiC.PROPERTY_TRANSLATION_X)) {
+				Object value = options.get(TiC.PROPERTY_TRANSLATION_X);
+				TiDimension dim = TiConvert.toTiDimension(value, TiDimension.TYPE_WIDTH);
+				if (dim != null) {
+					float target = (float) dim.getPixels(view);
+					addAnimator(animators, ObjectAnimator.ofFloat(view, "translationX", target));
+				}
+			}
+			if (options.containsKey(TiC.PROPERTY_TRANSLATION_Y)) {
+				Object value = options.get(TiC.PROPERTY_TRANSLATION_Y);
+				TiDimension dim = TiConvert.toTiDimension(value, TiDimension.TYPE_HEIGHT);
+				if (dim != null) {
+					float target = (float) dim.getPixels(view);
+					addAnimator(animators, ObjectAnimator.ofFloat(view, "translationY", target));
+				}
 			}
 		}
 
@@ -619,6 +685,42 @@ public class TiAnimationBuilder
 			relayoutChild = !includesRotation && (autoreverse == null || !autoreverse.booleanValue());
 		}
 
+		if (paddingLeft != null || paddingRight != null || paddingTop != null || paddingBottom != null) {
+			if (animatorHelper == null) {
+				animatorHelper = new AnimatorHelper();
+			}
+
+			int currentPaddingLeft = view.getPaddingLeft();
+			int currentPaddingRight = view.getPaddingRight();
+			int currentPaddingTop = view.getPaddingTop();
+			int currentPaddingBottom = view.getPaddingBottom();
+
+			if (paddingLeft != null) {
+				TiDimension dim = new TiDimension(paddingLeft, TiDimension.TYPE_LEFT);
+				int toPaddingLeft = dim.getAsPixels(view);
+				addAnimator(animators,
+					ObjectAnimator.ofInt(animatorHelper, "paddingLeft", currentPaddingLeft, toPaddingLeft));
+			}
+			if (paddingRight != null) {
+				TiDimension dim = new TiDimension(paddingRight, TiDimension.TYPE_RIGHT);
+				int toPaddingRight = dim.getAsPixels(view);
+				addAnimator(animators,
+					ObjectAnimator.ofInt(animatorHelper, "paddingRight", currentPaddingRight, toPaddingRight));
+			}
+			if (paddingTop != null) {
+				TiDimension dim = new TiDimension(paddingTop, TiDimension.TYPE_TOP);
+				int toPaddingTop = dim.getAsPixels(view);
+				addAnimator(animators,
+					ObjectAnimator.ofInt(animatorHelper, "paddingTop", currentPaddingTop, toPaddingTop));
+			}
+			if (paddingBottom != null) {
+				TiDimension dim = new TiDimension(paddingBottom, TiDimension.TYPE_BOTTOM);
+				int toPaddingBottom = dim.getAsPixels(view);
+				addAnimator(animators,
+					ObjectAnimator.ofInt(animatorHelper, "paddingBottom", currentPaddingBottom, toPaddingBottom));
+			}
+		}
+
 		AnimatorSet as = new AnimatorSet();
 		as.playTogether(animators);
 
@@ -631,8 +733,105 @@ public class TiAnimationBuilder
 		if (delay != null) {
 			as.setStartDelay(delay.longValue());
 		}
+
+		// If a damping ratio is provided, switch to a physics-based spring timing
+		// by assigning a TimeInterpolator approximating a spring to each child animator.
+		if (dampingRatio != null) {
+			final float dr = dampingRatio.floatValue();
+			final float velocity = (springVelocity != null) ? springVelocity.floatValue() : 0f;
+			for (Animator child : as.getChildAnimations()) {
+				if (child instanceof ValueAnimator) {
+					((ValueAnimator) child).setInterpolator(new SpringInterpolator(dr, velocity));
+				}
+			}
+		}
 		animatorSet = as;
 		return as;
+	}
+
+	/** Determine if we should temporarily promote the view to a hardware layer. */
+	private boolean shouldPromoteToHardwareLayer()
+	{
+		// Follow Android guidance: promote for alpha on views with overlapping rendering
+		// to avoid per-pixel compositing on each child; skip when no overlap.
+		if (toOpacity != null) {
+			boolean overlaps = (view != null) && view.hasOverlappingRendering();
+			return overlaps;
+		}
+		return false;
+	}
+
+	/** Promote to hardware layer for the duration of the animation if beneficial. */
+	private void promoteHardwareLayerIfNeeded()
+	{
+		if (view == null || promotedHardwareLayer) {
+			return;
+		}
+		// Respect explicit software layer requests (e.g. rounded corners + transparency on old Android)
+		if (view.getLayerType() == View.LAYER_TYPE_SOFTWARE) {
+			return;
+		}
+		// Only promote when hardware acceleration is actually enabled
+		if (!view.isHardwareAccelerated()) {
+			return;
+		}
+		if (shouldPromoteToHardwareLayer()) {
+			previousLayerType = view.getLayerType();
+			view.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+			promotedHardwareLayer = true;
+		}
+	}
+
+	/** Restore original layer type after animation. */
+	private void restoreLayerTypeIfPromoted()
+	{
+		if (view != null) {
+			if (promotedHardwareLayer) {
+				view.setLayerType(previousLayerType, null);
+				promotedHardwareLayer = false;
+			}
+			// Always restore transient state if we set it, regardless of hardware layer promotion
+			if (hasTransientState) {
+				try {
+					view.setHasTransientState(false);
+					hasTransientState = false;
+				} catch (Throwable t) {
+					// Ignore – method exists from API 16
+				}
+			}
+		}
+	}
+
+	/**
+	 * Simple damped spring interpolator used to emulate iOS dampingRatio behavior
+	 * when using Android ValueAnimator. For more realistic physics, we will
+	 * integrate with androidx.dynamicanimation where applicable.
+	 */
+	private static class SpringInterpolator implements android.animation.TimeInterpolator
+	{
+		private final float damping;
+		private final float velocity;
+
+		SpringInterpolator(float dampingRatio, float initialVelocity)
+		{
+			this.damping = dampingRatio;
+			this.velocity = initialVelocity;
+		}
+
+		@Override
+		public float getInterpolation(float t)
+		{
+			// Critically damped-ish approximation if damping ~1
+			// Underdamped oscillation if damping < 1
+			final double twoPi = Math.PI * 2.0;
+			final double decay = Math.exp(-damping * 5.0 * t);
+			final double freq = 1.0 - damping * 0.5; // lower freq with higher damping
+			final double osc = Math.cos(twoPi * freq * t) + (velocity * Math.sin(twoPi * freq * t));
+			double value = 1.0 - (decay * osc);
+			if (value < 0.0) value = 0.0;
+			if (value > 1.0) value = 1.0;
+			return (float) value;
+		}
 	}
 
 	private void addAnimation(AnimationSet animationSet, Animation animation)
@@ -866,6 +1065,30 @@ public class TiAnimationBuilder
 			invalidateParentView();
 		}
 
+		public void setPaddingLeft(final int p)
+		{
+			view.setPadding(p, view.getPaddingTop(), view.getPaddingRight(), view.getPaddingBottom());
+			invalidateParentView();
+		}
+
+		public void setPaddingRight(final int p)
+		{
+			view.setPadding(view.getPaddingLeft(), view.getPaddingTop(), p, view.getPaddingBottom());
+			invalidateParentView();
+		}
+
+		public void setPaddingTop(final int p)
+		{
+			view.setPadding(view.getPaddingLeft(), p, view.getPaddingRight(), view.getPaddingBottom());
+			invalidateParentView();
+		}
+
+		public void setPaddingBottom(final int p)
+		{
+			view.setPadding(view.getPaddingLeft(), view.getPaddingTop(), view.getPaddingRight(), p);
+			invalidateParentView();
+		}
+
 		private void invalidateParentView()
 		{
 			ViewParent vp = view.getParent();
@@ -899,6 +1122,7 @@ public class TiAnimationBuilder
 		{
 			if (animator instanceof AnimatorSet) {
 				setAnimationRunningFor(view, false);
+				restoreLayerTypeIfPromoted();
 			}
 		}
 
@@ -915,6 +1139,10 @@ public class TiAnimationBuilder
 						Object value = options.get(key);
 						viewProxy.setProperty(name, value);
 					}
+					// If we faded to 0, make the view not draw at all
+					if (toOpacity != null && toOpacity.floatValue() == 0f && view != null) {
+						view.setVisibility(View.INVISIBLE);
+					}
 				}
 				if (callback != null) {
 					callback.callAsync(viewProxy.getKrollObject(), new Object[] { new KrollDict() });
@@ -923,6 +1151,9 @@ public class TiAnimationBuilder
 				if (animationProxy != null) {
 					animationProxy.fireEvent(TiC.EVENT_COMPLETE, null);
 				}
+
+				// Restore original layer type after animators complete
+				restoreLayerTypeIfPromoted();
 			}
 		}
 
@@ -936,6 +1167,22 @@ public class TiAnimationBuilder
 		{
 			if (animationProxy != null) {
 				animationProxy.fireEvent(TiC.EVENT_START, null);
+			}
+			// Promote to hardware layer at start for better alpha/transform performance
+			promoteHardwareLayerIfNeeded();
+			// Ensure view is visible when fading in
+			if (toOpacity != null
+				&& toOpacity.floatValue() > 0f
+				&& view != null
+				&& view.getVisibility() != View.VISIBLE) {
+				view.setVisibility(View.VISIBLE);
+			}
+			// Mark transient state to keep parent from unnecessary optimizations during animation
+			try {
+				view.setHasTransientState(true);
+				hasTransientState = true;
+			} catch (Throwable t) {
+				// Ignore – method exists from API 16
 			}
 		}
 	}
@@ -1031,9 +1278,168 @@ public class TiAnimationBuilder
 		this.view = view;
 		this.viewProxy = viewProxy;
 
+		if (dampingRatio != null) {
+			boolean started = startSpringAnimationsIfPossible();
+			if (started) {
+				return;
+			}
+		}
+
 		if (tdm == null || tdm.canUsePropertyAnimators()) {
+			promoteHardwareLayerIfNeeded();
 			buildPropertyAnimators().start();
 		}
+	}
+
+	private boolean startSpringAnimationsIfPossible()
+	{
+		// If layout-affecting properties are part of this animation, fall back to
+		// the ValueAnimator path so we can animate via AnimatorHelper (we'll still
+		// use a spring-like interpolator there).
+		if (top != null || bottom != null || left != null || right != null
+			|| centerX != null || centerY != null || width != null || height != null
+			|| paddingLeft != null || paddingRight != null || paddingTop != null || paddingBottom != null) {
+			return false;
+		}
+
+		List<SpringAnimation> list = new ArrayList<>();
+
+		// Helper to configure and collect a spring for a given property/target
+		java.util.function.BiConsumer<SpringAnimation, Float> add = (sa, target) -> {
+			SpringForce force = new SpringForce(target);
+			force.setDampingRatio(dampingRatio.floatValue());
+			force.setStiffness(SpringForce.STIFFNESS_MEDIUM);
+			sa.setSpring(force);
+			sa.setStartVelocity((springVelocity != null) ? springVelocity.floatValue() : 0f);
+			list.add(sa);
+		};
+
+		// Simple properties
+		if (toOpacity != null) {
+			add.accept(new SpringAnimation(view, DynamicAnimation.ALPHA), toOpacity.floatValue());
+		}
+		if (rotationY >= 0) {
+			add.accept(new SpringAnimation(view, DynamicAnimation.ROTATION_Y), rotationY);
+		}
+		if (rotationX >= 0) {
+			add.accept(new SpringAnimation(view, DynamicAnimation.ROTATION_X), rotationX);
+		}
+
+		// Direct translationX / translationY (non-matrix) target support
+		if (options != null) {
+			if (options.containsKey(TiC.PROPERTY_TRANSLATION_X)) {
+				Object value = options.get(TiC.PROPERTY_TRANSLATION_X);
+				TiDimension dim = TiConvert.toTiDimension(value, TiDimension.TYPE_WIDTH);
+				if (dim != null) {
+					float target = (float) dim.getPixels(view);
+					add.accept(new SpringAnimation(view, DynamicAnimation.TRANSLATION_X), target);
+				}
+			}
+			if (options.containsKey(TiC.PROPERTY_TRANSLATION_Y)) {
+				Object value = options.get(TiC.PROPERTY_TRANSLATION_Y);
+				TiDimension dim = TiConvert.toTiDimension(value, TiDimension.TYPE_HEIGHT);
+				if (dim != null) {
+					float target = (float) dim.getPixels(view);
+					add.accept(new SpringAnimation(view, DynamicAnimation.TRANSLATION_Y), target);
+				}
+			}
+			// Direct scaleX / scaleY support for spring animations
+			if (options.containsKey(TiC.PROPERTY_SCALE_X)) {
+				float target = TiConvert.toFloat(options, TiC.PROPERTY_SCALE_X);
+				add.accept(new SpringAnimation(view, DynamicAnimation.SCALE_X), target);
+			}
+			if (options.containsKey(TiC.PROPERTY_SCALE_Y)) {
+				float target = TiConvert.toFloat(options, TiC.PROPERTY_SCALE_Y);
+				add.accept(new SpringAnimation(view, DynamicAnimation.SCALE_Y), target);
+			}
+			// Direct rotation support for spring animations
+			if (options.containsKey(TiC.PROPERTY_ROTATION)) {
+				float target = TiConvert.toFloat(options, TiC.PROPERTY_ROTATION);
+				// Note: DynamicAnimation.ROTATION uses radians, but Matrix2D stores degrees
+				// For consistency with Matrix2D behavior, we use degrees directly
+				// (Android's view.setRotation also uses degrees)
+				add.accept(new SpringAnimation(view, DynamicAnimation.ROTATION), target);
+			}
+		}
+
+		// Matrix-based transforms (only if we can decompose to view properties)
+		if (tdm != null && tdm.canUsePropertyAnimators()) {
+			List<Operation> operations = tdm.getAllOperations();
+			for (Operation operation : operations) {
+				switch (operation.type) {
+					case Operation.TYPE_ROTATE:
+						add.accept(new SpringAnimation(view, DynamicAnimation.ROTATION), operation.rotateTo);
+						break;
+					case Operation.TYPE_SCALE:
+						add.accept(new SpringAnimation(view, DynamicAnimation.SCALE_X), operation.scaleToX);
+						add.accept(new SpringAnimation(view, DynamicAnimation.SCALE_Y), operation.scaleToY);
+						break;
+					case Operation.TYPE_TRANSLATE:
+						add.accept(new SpringAnimation(view, DynamicAnimation.TRANSLATION_X), operation.translateX);
+						add.accept(new SpringAnimation(view, DynamicAnimation.TRANSLATION_Y), operation.translateY);
+				}
+			}
+		}
+
+		if (list.isEmpty()) {
+			return false;
+		}
+
+		// Event: start
+		if (animationProxy != null) {
+			animationProxy.fireEvent(TiC.EVENT_START, null);
+		}
+
+		// Delay support
+		Runnable starter = () -> {
+			final int total = list.size();
+			final int[] ended = new int[] { 0 };
+			// Promote to HW layer for the duration of spring animations if helpful
+			promoteHardwareLayerIfNeeded();
+			// Mark transient state to keep parent from unnecessary optimizations during animation
+			if (view != null) {
+				try {
+					view.setHasTransientState(true);
+					hasTransientState = true;
+				} catch (Throwable t) {
+					// Ignore – method exists from API 16
+				}
+			}
+			for (SpringAnimation sa : list) {
+				sa.addEndListener((anim, canceled, value, velocity) -> {
+					ended[0]++;
+					if (ended[0] >= total) {
+						// Mirror onAnimationEnd behavior
+						setAnimationRunningFor(view, false);
+						if (autoreverse == null || !autoreverse.booleanValue()) {
+							for (Object key : options.keySet()) {
+								String name = TiConvert.toString(key);
+								Object v = options.get(key);
+								viewProxy.setProperty(name, v);
+							}
+						}
+						if (callback != null) {
+							callback.callAsync(viewProxy.getKrollObject(), new Object[] { new KrollDict() });
+						}
+						if (animationProxy != null) {
+							animationProxy.fireEvent(TiC.EVENT_COMPLETE, null);
+						}
+						// Restore original layer type after all springs complete
+						restoreLayerTypeIfPromoted();
+					}
+				});
+				sa.start();
+			}
+			this.springAnimations = list;
+		};
+
+		if (delay != null && delay.longValue() > 0) {
+			view.postDelayed(starter, delay.longValue());
+		} else {
+			starter.run();
+		}
+
+		return true;
 	}
 
 	public void stop(View view)
@@ -1043,8 +1449,17 @@ public class TiAnimationBuilder
 			animatorSet.cancel();
 			animatorSet = null;
 		}
+
+		if (springAnimations != null) {
+			for (SpringAnimation sa : springAnimations) {
+				sa.cancel();
+			}
+			springAnimations = null;
+		}
 		view.clearAnimation();
 		setAnimationRunningFor(view, false);
+		// Restore transient state and layer type when stopping animation
+		restoreLayerTypeIfPromoted();
 		if (animationProxy != null) {
 			animationProxy.fireEvent(TiC.EVENT_CANCEL, null);
 		}

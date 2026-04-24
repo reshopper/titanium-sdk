@@ -309,11 +309,6 @@ void Proxy::hasListenersForEventType(const v8::FunctionCallbackInfo<v8::Value>& 
 	}
 	Proxy* proxy = NativeObject::Unwrap<Proxy>(holder);
 
-	if (proxy == nullptr) {
-		JSException::Error(isolate, "Failed to unwrap Proxy instance.");
-		return;
-	}
-
 	// TODO Support Symbols for event types?
 	Local<String> eventType = args[0].As<String>();
 	Local<Boolean> hasListeners = args[1]->ToBoolean(isolate);
@@ -354,11 +349,6 @@ void Proxy::onEventFired(const v8::FunctionCallbackInfo<v8::Value>& args)
 		holder = holder->FindInstanceInPrototypeChain(baseProxyTemplate.Get(isolate));
 	}
 	Proxy* proxy = NativeObject::Unwrap<Proxy>(holder);
-
-	if (proxy == nullptr) {
-		JSException::Error(isolate, "Failed to unwrap Proxy instance.");
-		return;
-	}
 
 	// TODO Support Symbols for event types?
 	Local<String> eventType = args[0].As<String>();

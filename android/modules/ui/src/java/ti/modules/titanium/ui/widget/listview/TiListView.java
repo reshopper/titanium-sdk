@@ -32,7 +32,6 @@ import androidx.recyclerview.selection.ItemKeyProvider;
 import androidx.recyclerview.selection.SelectionPredicates;
 import androidx.recyclerview.selection.SelectionTracker;
 import androidx.recyclerview.selection.StorageStrategy;
-import androidx.recyclerview.widget.DividerItemDecoration;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -45,7 +44,7 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 	private static final String TAG = "TiListView";
 
 	private final ListViewAdapter adapter;
-	private final DividerItemDecoration decoration;
+	private final ListDividerItemDecoration decoration;
 	private final List<ListItemProxy> items = new ArrayList<>(128);
 	private final ListViewProxy proxy;
 	private final TiNestedRecyclerView recyclerView;
@@ -185,8 +184,8 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 		// We improved it by creating off-screen items on 1st call of onLayoutChildren().
 		recyclerView.setItemViewCacheSize(0);
 
-		// Set list separator.
-		decoration = new DividerItemDecoration(getContext(), DividerItemDecoration.VERTICAL);
+		// Set list separator using custom decoration that skips first/header placeholders.
+		decoration = new ListDividerItemDecoration(this);
 		this.recyclerView.addItemDecoration(decoration);
 
 		// Create list adapter.
@@ -584,6 +583,20 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 	}
 
 	/**
+	 * Obtain item by adapter position.
+	 *
+	 * @param position Adapter position.
+	 * @return Item at adapter position or null.
+	 */
+	public ListItemProxy getItemAtAdapterPosition(int position)
+	{
+		if (position > -1 && position < this.items.size()) {
+			return this.items.get(position);
+		}
+		return null;
+	}
+
+	/**
 	 * Obtain last visible list item proxy.
 	 *
 	 * @return ListItemProxy
@@ -711,13 +724,11 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 					.optBoolean(TiC.PROPERTY_FILTER_ALWAYS_INCLUDE, false);
 				// Handle search query.
 				if (query != null && !alwaysInclude) {
-					String searchableText;
-					if (caseInsensitive) {
-						searchableText = item.getSearchableTextLower();
-					} else {
-						searchableText = item.getProperties().optString(TiC.PROPERTY_SEARCHABLE_TEXT, null);
-					}
+					String searchableText = item.getProperties().optString(TiC.PROPERTY_SEARCHABLE_TEXT, null);
 					if (searchableText != null) {
+						if (caseInsensitive) {
+							searchableText = searchableText.toLowerCase();
+						}
 						if (!searchableText.contains(query)) {
 							continue;
 						}

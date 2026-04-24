@@ -10,7 +10,6 @@
 #import "TiUIListView.h"
 #import <TitaniumKit/TiUtils.h>
 #import <TitaniumKit/TiViewTemplate.h>
-#include <pthread.h>
 
 @interface TiUIListViewProxy ()
 @property (nonatomic, readwrite) TiUIListView *listView;
@@ -385,6 +384,49 @@
   }];
 }
 
+- (BOOL)isSectionHeaderInSectionWithIndexVisible:(id)index
+{
+  ENSURE_SINGLE_ARG(index, NSNumber);
+
+  UITableView *tableview = self.listView.tableView;
+
+  if (tableview.numberOfSections < [TiUtils intValue:index]) {
+    return NO;
+  }
+
+  CGRect headerRect;
+
+  // In plain style, the section headers are floating on the top, so the section header is visible if any part of the section's rect is still visible.
+  // In grouped style, the section headers are not floating, so the section header is only visible if it's actualy rect is visible.
+  if (tableview.style == UITableViewStylePlain) {
+    headerRect = [tableview rectForSection:[TiUtils intValue:index]];
+  } else {
+    headerRect = [tableview rectForHeaderInSection:[TiUtils intValue:index]];
+  }
+
+  // The "visible part" of the tableView is based on the content offset and the tableView's size.
+  CGRect visiblePartOfTableView = CGRectMake(tableview.contentOffset.x, tableview.contentOffset.y, tableview.bounds.size.width, tableview.bounds.size.height);
+  return CGRectIntersectsRect(visiblePartOfTableView, headerRect);
+}
+
+- (TiPoint *)getYOffsetForSection:(id)index
+{
+
+  ENSURE_SINGLE_ARG(index, NSNumber);
+
+  UITableView *tableview = self.listView.tableView;
+
+  CGRect headerRect;
+
+  if (tableview.style == UITableViewStylePlain) {
+    headerRect = [tableview rectForSection:[TiUtils intValue:index]];
+  } else {
+    headerRect = [tableview rectForHeaderInSection:[TiUtils intValue:index]];
+  }
+
+  return [[[TiPoint alloc] initWithPoint:headerRect.origin] autorelease];
+}
+
 - (void)replaceSectionAt:(id)args
 {
   ENSURE_ARG_COUNT(args, 2);
@@ -441,6 +483,40 @@
   }
 }
 
+- (void)scrollToBottom:(id)args
+{
+  if (view != nil) {
+    NSDictionary *properties = [args isKindOfClass:[NSDictionary class]] ? args : ([args isKindOfClass:[NSArray class]] && [args count] > 0 ? [args objectAtIndex:0] : nil);
+    UITableViewScrollPosition scrollPosition = [TiUtils intValue:@"position" properties:properties def:UITableViewScrollPositionNone];
+    BOOL animated = [TiUtils boolValue:@"animated" properties:properties def:YES];
+
+    TiThreadPerformOnMainThread(
+        ^{
+          if ([_sections count] == 0) {
+            DebugLog(@"[WARN] ListView: scrollToBottom called with no sections");
+            return;
+          }
+
+          // Find last section having at least one item; otherwise use last section with row 0
+          NSInteger sectionIndex = (NSInteger)[_sections count] - 1;
+          TiUIListSectionProxy *section = [_sections objectAtIndex:sectionIndex];
+          while (sectionIndex > 0 && section.itemCount == 0) {
+            sectionIndex--;
+            section = [_sections objectAtIndex:sectionIndex];
+          }
+
+          NSUInteger row = 0;
+          if (section.itemCount > 0) {
+            row = section.itemCount - 1;
+          }
+
+          NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:sectionIndex];
+          [self.listView.tableView scrollToRowAtIndexPath:indexPath atScrollPosition:scrollPosition animated:animated];
+        },
+        [NSThread isMainThread]);
+  }
+}
+
 - (void)selectItem:(id)args
 {
   ENSURE_ARG_COUNT(args, 2);
@@ -491,6 +567,30 @@
         },
         [NSThread isMainThread]);
   }
+}
+
+- (TiPoint *)contentOffset
+{
+  [super contentOffset];
+
+  __block TiPoint *localContentOffset = nil; // Deklarer som __block lokal variabel
+
+  if ([self viewAttached]) {
+    TiThreadPerformOnMainThread(
+        ^{
+          // Tildel til den lokale variabel
+          localContentOffset = [[TiPoint alloc] initWithPoint:CGPointMake(
+                                                                  self.listView.tableView.contentOffset.x,
+                                                                  self.listView.tableView.contentOffset.y)];
+        },
+        YES); // Sikrer at blokken udføres færdigt før vi fortsætter
+  } else {
+    // Tildel til den lokale variabel
+    localContentOffset = [[TiPoint alloc] initWithPoint:CGPointMake(0, 0)];
+  }
+
+  // Returner den lokale variabel (og autorelease som før)
+  return [localContentOffset autorelease];
 }
 
 - (void)setContentOffset:(id)args
@@ -654,6 +754,30 @@
     }
     pthread_rwlock_unlock(&_markerLock);
   }
+}
+#pragma mark - Layout Trigger
+
+- (void)triggerLayoutUpdate:(id)args
+{
+  TiThreadPerformOnMainThread(
+      ^{
+        if ([self viewInitialized] && self.listView.tableView != nil) {
+          UITableView *tableView = self.listView.tableView;
+          NSUInteger sectionCount = [self.sectionCount unsignedIntegerValue];
+          if (sectionCount > 0) {
+            NSIndexSet *sectionsToReload = [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, sectionCount)];
+            [tableView reloadSections:sectionsToReload withRowAnimation:UITableViewRowAnimationNone];
+          } else {
+            // Fallback for empty table? Or just do nothing?
+            // Maybe just begin/end updates is safer here?
+            [tableView beginUpdates];
+            [tableView endUpdates];
+          }
+        } else {
+          DebugLog(@"[WARN] ListView: Attempted to trigger layout update, but view or table view is not initialized.");
+        }
+      },
+      NO);
 }
 
 DEFINE_DEF_BOOL_PROP(willScrollOnStatusTap, YES);

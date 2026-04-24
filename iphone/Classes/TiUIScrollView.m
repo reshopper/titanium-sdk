@@ -310,12 +310,8 @@
   [super frameSizeChanged:frame bounds:visibleBounds];
 }
 
-- (void)scrollToBottom
+- (void)scrollToBottom:(id)options
 {
-  /*
-   * Calculate the bottom height & width and, sets the offset from the
-   * content view’s origin that corresponds to the receiver’s origin.
-   */
   UIScrollView *currScrollView = [self scrollView];
 
   CGSize svContentSize = currScrollView.contentSize;
@@ -327,7 +323,9 @@
 
   CGPoint newOffset = CGPointMake(bottomWidth, bottomHeight);
 
-  [currScrollView setContentOffset:newOffset animated:YES];
+  BOOL animated = [TiUtils boolValue:@"animated" properties:options def:(scrollView != nil)];
+
+  [currScrollView setContentOffset:newOffset animated:animated];
 }
 
 - (void)scrollToTop
@@ -422,9 +420,30 @@
 
 - (void)setContentOffset_:(id)value withObject:(id)property
 {
+  ENSURE_TYPE_OR_NIL(property, NSDictionary);
   CGPoint newOffset = [TiUtils pointValue:value];
-  BOOL animated = [TiUtils boolValue:@"animated" properties:property def:(scrollView != nil)];
+  BOOL animated = [TiUtils boolValue:@"animated" properties:property def:YES];
+
   [[self scrollView] setContentOffset:newOffset animated:animated];
+}
+
+- (void)setContentInsets_:(id)value withObject:(id)property
+{
+  ENSURE_TYPE_OR_NIL(property, NSDictionary);
+  UIEdgeInsets newInsets = [TiUtils contentInsets:value];
+  BOOL animated = [TiUtils boolValue:@"animated" properties:property def:NO];
+
+  if (animated) {
+    // Cancel any existing animations to prevent conflicts
+    [scrollView.layer removeAllAnimations];
+
+    [UIView animateWithDuration:[TiUtils doubleValue:@"duration" properties:property def:0.3]
+                     animations:^{
+                       [[self scrollView] setContentInset:newInsets];
+                     }];
+  } else {
+    [[self scrollView] setContentInset:newInsets];
+  }
 }
 
 #if IS_SDK_IOS_26
@@ -475,6 +494,7 @@
 
 - (void)setZoomScale_:(id)value withObject:(id)property
 {
+  ENSURE_TYPE_OR_NIL(property, NSDictionary);
   CGFloat scale = [TiUtils floatValue:value def:1.0];
   BOOL animated = [TiUtils boolValue:@"animated" properties:property def:NO];
   [[self scrollView] setZoomScale:scale animated:animated];

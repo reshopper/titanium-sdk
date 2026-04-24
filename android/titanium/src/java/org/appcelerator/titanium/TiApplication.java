@@ -74,8 +74,6 @@ public abstract class TiApplication extends Application implements KrollApplicat
 
 	protected static TiApplication tiApp = null;
 
-	private static final Pattern UNIT_PATTERN = Pattern.compile("system|px|dp|dip|mm|cm|in");
-
 	public static final String DEPLOY_TYPE_DEVELOPMENT = "development";
 	public static final String DEPLOY_TYPE_TEST = "test";
 	public static final String DEPLOY_TYPE_PRODUCTION = "production";
@@ -816,7 +814,9 @@ public abstract class TiApplication extends Application implements KrollApplicat
 	{
 		if (defaultUnit == null) {
 			defaultUnit = getAppProperties().getString(PROPERTY_DEFAULT_UNIT, SYSTEM_UNIT);
-			Matcher m = UNIT_PATTERN.matcher(defaultUnit);
+			// Check to make sure default unit is valid, otherwise use system
+			Pattern unitPattern = Pattern.compile("system|px|dp|dip|mm|cm|in");
+			Matcher m = unitPattern.matcher(defaultUnit);
 			if (!m.matches()) {
 				defaultUnit = SYSTEM_UNIT;
 			}

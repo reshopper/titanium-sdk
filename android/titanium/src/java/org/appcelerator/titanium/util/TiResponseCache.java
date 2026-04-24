@@ -33,6 +33,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
+import java.util.zip.InflaterInputStream;
+
+import org.brotli.dec.BrotliInputStream;
 
 import org.appcelerator.kroll.common.Log;
 import org.appcelerator.titanium.TiApplication;
@@ -334,21 +337,24 @@ public class TiResponseCache extends ResponseCache
 				return null;
 			}
 			try {
-				boolean isGZip = false;
+				String contentEncoding = null;
 				// Read in the headers
 				try {
 					Map<String, List<String>> headers = readHeaders(hFile);
-					String contentEncoding = getHeader(headers, "content-encoding");
-					if ("gzip".equalsIgnoreCase(contentEncoding)) {
-						isGZip = true;
-					}
+					contentEncoding = getHeader(headers, "content-encoding");
 				} catch (IOException e) {
 					// continue with file read?
 				}
-				if (isGZip) {
-					return new GZIPInputStream(new FileInputStream(bFile));
+				// Decompress cached response based on Content-Encoding header
+				FileInputStream fis = new FileInputStream(bFile);
+				if ("gzip".equalsIgnoreCase(contentEncoding)) {
+					return new GZIPInputStream(fis);
+				} else if ("deflate".equalsIgnoreCase(contentEncoding)) {
+					return new InflaterInputStream(fis);
+				} else if ("br".equalsIgnoreCase(contentEncoding)) {
+					return new BrotliInputStream(fis);
 				}
-				return new FileInputStream(bFile);
+				return fis;
 			} catch (FileNotFoundException e) {
 				// Fallback to URL download?
 				return null;

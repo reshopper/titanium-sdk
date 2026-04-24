@@ -43,6 +43,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
 import org.appcelerator.kroll.KrollDict;
+import org.appcelerator.kroll.KrollFunction;
 import org.appcelerator.kroll.KrollPromise;
 import org.appcelerator.kroll.annotations.Kroll;
 import org.appcelerator.kroll.common.Log;
@@ -187,6 +188,9 @@ public class WindowProxy extends TiWindowProxy implements TiActivityWindow
 	@Override
 	protected void handleClose(@NonNull KrollDict options)
 	{
+		// Merge close options into properties, allowing transitions to be overridden at close time.
+		properties.putAll(options);
+
 		// Fetch this window's "exitOnClose" property setting.
 		boolean exitOnClose = (TiActivityWindows.getWindowCount() <= 1);
 		exitOnClose = TiConvert.toBoolean(getProperty(TiC.PROPERTY_EXIT_ON_CLOSE), exitOnClose);
@@ -211,6 +215,7 @@ public class WindowProxy extends TiWindowProxy implements TiActivityWindow
 
 		// Destroy the activity and apply exit animations if configured.
 		if (!exitOnClose && super.hasActivityTransitions()) {
+			applyActivityTransitions(activity.getWindow(), properties);
 			activity.finishAfterTransition();
 		} else {
 			activity.finish();
@@ -391,6 +396,7 @@ public class WindowProxy extends TiWindowProxy implements TiActivityWindow
 	{
 		// Fire the open event after setContentView() because getActionBar() need to be called
 		// after setContentView(). (TIMOB-14914)
+		clearWillCloseFiredFlag();
 		opened = true;
 		opening = false;
 		fireEvent(TiC.EVENT_OPEN, null);
@@ -489,6 +495,17 @@ public class WindowProxy extends TiWindowProxy implements TiActivityWindow
 				AppCompatActivity activity = windowActivity.get();
 				int colorInt = TiColorHelper.parseColor(TiConvert.toString(value), activity);
 				activity.getWindow().setNavigationBarColor(colorInt);
+			}
+		}
+
+		// Allow changing soft input mode at runtime by applying to the active window
+		if (name.equals(TiC.PROPERTY_WINDOW_SOFT_INPUT_MODE)) {
+			if (windowActivity != null && windowActivity.get() != null) {
+				AppCompatActivity activity = windowActivity.get();
+				int mode = TiConvert.toInt(value, -1);
+				if (mode != -1) {
+					activity.getWindow().setSoftInputMode(mode);
+				}
 			}
 		}
 
@@ -753,5 +770,17 @@ public class WindowProxy extends TiWindowProxy implements TiActivityWindow
 	public String getApiName()
 	{
 		return "Ti.UI.Window";
+	}
+
+	// measureActualDimensions(options?, callback?) -> Promise<{ width, height }>
+	@Kroll.method
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	public KrollPromise<KrollDict> measureActualDimensions(
+		@Kroll.argument(optional = true) KrollDict options,
+		@Kroll.argument(optional = true) KrollFunction callback)
+	{
+		// Delegate to base-class measure() which measures our content view (created in createView),
+		// allowing pre-open measurement as the content view exists independently of Activity open.
+		return super.measure(options, callback);
 	}
 }

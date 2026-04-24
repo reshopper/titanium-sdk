@@ -6,6 +6,7 @@
  */
 #include <stdio.h>
 #include <cstring>
+#include <string>
 
 #include <v8-platform.h>
 #include <libplatform/libplatform.h>
@@ -174,6 +175,118 @@ static void logV8Exception(Local<Message> msg, Local<Value> data)
 		msg->GetSourceLine(context).ToLocalChecked());
 }
 
+void promiseRejectCallback(PromiseRejectMessage message)
+{
+	if (message.GetEvent() == kPromiseRejectWithNoHandler) {
+		Isolate* isolate = V8Runtime::v8_isolate;
+		HandleScope scope(isolate);
+
+        Local<Value> exception = message.GetValue();
+        Local<String> exceptionString;
+
+        // Attempt to build a rich error description
+        Local<Context> context = isolate->GetCurrentContext();
+        std::string header; // e.g. "ErrorName: message"
+
+        if (exception->IsObject()) {
+            Local<Object> obj = exception.As<Object>();
+
+            // Prefer a real stack if present
+            Local<Value> stackValue;
+            MaybeLocal<Value> maybeStack = obj->Get(context, STRING_NEW(isolate, "stack"));
+            if (maybeStack.ToLocal(&stackValue) && stackValue->IsString()) {
+                // Try to prepend name and message if available
+                Local<Value> nameValue;
+                Local<Value> messageValue;
+                bool hasName = obj->Get(context, STRING_NEW(isolate, "name")).ToLocal(&nameValue) && nameValue->IsString();
+                bool hasMessage = obj->Get(context, STRING_NEW(isolate, "message")).ToLocal(&messageValue) && messageValue->IsString();
+                if (hasName || hasMessage) {
+                    std::string nameStr = hasName ? *String::Utf8Value(isolate, nameValue) : "";
+                    std::string msgStr = hasMessage ? *String::Utf8Value(isolate, messageValue) : "";
+                    if (!nameStr.empty()) {
+                        header.append(nameStr);
+                        if (!msgStr.empty()) {
+                            header.append(": ");
+                        }
+                    }
+                    header.append(msgStr);
+                }
+
+                if (!header.empty()) {
+                    // Combine header and stack
+                    std::string combined = header;
+                    combined.append("\n");
+                    combined.append(*String::Utf8Value(isolate, stackValue));
+                    exceptionString = v8::String::NewFromUtf8(isolate, combined.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
+                } else {
+                    exceptionString = stackValue.As<String>();
+                }
+            }
+
+            // If no stack or header found, try JSON.stringify for objects
+            if (exceptionString.IsEmpty()) {
+                TryCatch stringifyTry(isolate);
+                MaybeLocal<String> maybeJson = v8::JSON::Stringify(context, obj);
+                if (!maybeJson.IsEmpty()) {
+                    exceptionString = maybeJson.ToLocalChecked();
+                }
+            }
+        }
+
+        // Fallback to toString() if we still don't have anything usable
+        if (exceptionString.IsEmpty()) {
+            TryCatch tryCatch(isolate);
+            MaybeLocal<String> maybeString = exception->ToString(context);
+            if (maybeString.IsEmpty()) {
+                exceptionString = STRING_NEW(isolate, "Unhandled promise rejection.");
+            } else {
+                exceptionString = maybeString.ToLocalChecked();
+            }
+        }
+
+		// If we still don't have a proper stack (e.g. rejection with a plain string),
+		// append a best-effort V8-generated stack trace for better diagnostics.
+		if (!exceptionString.IsEmpty()) {
+			// Heuristic: If the string doesn't already contain a newline typical of stack frames,
+			// we append a generated stack to aid debugging.
+			String::Utf8Value utf8Reason(isolate, exceptionString);
+			bool looksLikeStack = strstr(*utf8Reason, "\n    at ") != nullptr || strstr(*utf8Reason, "\n    at") != nullptr;
+			if (!looksLikeStack) {
+				Local<StackTrace> st = StackTrace::CurrentStackTrace(isolate, 16, StackTrace::kOverview);
+				if (!st.IsEmpty() && st->GetFrameCount() > 0) {
+					// Format stack frames
+					std::string formatted = std::string(*utf8Reason);
+					formatted.append("\n---- Generated stack ----");
+					for (int i = 0; i < st->GetFrameCount(); i++) {
+						Local<StackFrame> frame = st->GetFrame(isolate, i);
+						String::Utf8Value fn(isolate, frame->GetFunctionName());
+						String::Utf8Value sn(isolate, frame->GetScriptNameOrSourceURL());
+						int line = frame->GetLineNumber();
+						int col = frame->GetColumn();
+						formatted.append("\n    at ");
+						formatted.append((*fn && fn.length() > 0) ? *fn : "<anonymous>");
+						formatted.append(" (");
+						formatted.append((*sn && sn.length() > 0) ? *sn : "<unknown>");
+						formatted.append(":");
+						formatted.append(std::to_string(line));
+						formatted.append(":");
+						formatted.append(std::to_string(col));
+						formatted.append(")");
+					}
+					exceptionString = v8::String::NewFromUtf8(isolate, formatted.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
+				}
+			}
+		}
+
+        JNIEnv* env = JNIScope::getEnv();
+		if (env) {
+			jstring error = env->NewStringUTF(*String::Utf8Value(isolate, exceptionString));
+			env->CallStaticVoidMethod(JNIUtil::v8RuntimeClass, JNIUtil::v8RuntimeFireUnhandledRejectionMethod, error);
+			env->DeleteLocalRef(error);
+		}
+	}
+}
+
 } // namespace titanium
 
 extern "C" {
@@ -221,9 +334,9 @@ JNIEXPORT void JNICALL Java_org_appcelerator_kroll_runtime_v8_V8Runtime_nativeIn
 		// Log all uncaught V8 exceptions.
 		isolate->AddMessageListener(logV8Exception);
 		// isolate->SetAbortOnUncaughtExceptionCallback(ShouldAbortOnUncaughtException);
-		// isolate->SetAutorunMicrotasks(false);
 		// isolate->SetFatalErrorHandler(OnFatalError);
 		isolate->SetCaptureStackTraceForUncaughtExceptions(true, 10, v8::StackTrace::kOverview);
+		isolate->SetPromiseRejectCallback(promiseRejectCallback);
 	} else {
 		isolate = V8Runtime::v8_isolate;
 		isolate->Enter();

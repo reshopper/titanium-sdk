@@ -13,7 +13,6 @@
 #import "TiUtils.h"
 #import <JavaScriptCore/JavaScriptCore.h>
 #include <libkern/OSAtomic.h>
-#include <pthread.h>
 
 extern JSStringRef kTiStringLength;
 

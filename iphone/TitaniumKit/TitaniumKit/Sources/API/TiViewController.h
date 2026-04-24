@@ -18,5 +18,6 @@
 
 - (id)initWithViewProxy:(TiViewProxy *)window;
 - (TiViewProxy *)proxy;
+- (void)releaseProxy;
 
 @end

@@ -82,14 +82,16 @@ static NSArray *imageKeySequence;
 
 - (void)stop:(id)args
 {
-  // Use performOnDestroyQueue: to safely handle reentrance when called from
-  // viewWillDetach or _destroy, which are already executing on the destroy queue.
-  [self performOnDestroyQueue:^{
-    if ([self viewAttached]) {
-      TiUIImageView *iv = (TiUIImageView *)[self view];
-      [iv stop];
-    }
-  }];
+  // Don't put this in UIThread, because it doesn't need to go in UIThread.
+  // Furthermore, by the time this is run, if this stop was called by a destroy
+  // Bad things(tm) happen.
+
+  [destroyLock lock];
+  if ([self viewAttached]) {
+    TiUIImageView *iv = (TiUIImageView *)[self view];
+    [iv stop];
+  }
+  [destroyLock unlock];
 }
 
 - (void)pause:(id)args

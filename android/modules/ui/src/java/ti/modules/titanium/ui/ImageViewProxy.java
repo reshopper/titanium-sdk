@@ -9,6 +9,7 @@ package ti.modules.titanium.ui;
 import android.app.Activity;
 
 import org.appcelerator.kroll.annotations.Kroll;
+import org.appcelerator.kroll.common.Log;
 import org.appcelerator.titanium.TiBlob;
 import org.appcelerator.titanium.TiC;
 import org.appcelerator.titanium.view.TiUIView;
@@ -32,6 +33,8 @@ import ti.modules.titanium.ui.widget.TiUIImageView;
 	})
 public class ImageViewProxy extends ViewProxy
 {
+	private static final String TAG = "ImageViewProxy";
+
 	public ImageViewProxy()
 	{
 		super();
@@ -42,6 +45,19 @@ public class ImageViewProxy extends ViewProxy
 	@Override
 	public TiUIView createView(Activity activity)
 	{
+		// Extra debug logging to trace creator and source
+		String creationUrl = null;
+		try {
+			if (getCreationUrl() != null) {
+				creationUrl = getCreationUrl().getNormalizedUrl();
+			}
+		} catch (Throwable t) {
+			// ignore
+		}
+		Log.d(TAG, "createView() called. activity=" + activity
+			+ ", creationUrl=" + (creationUrl != null ? creationUrl : "<null>")
+			+ ", thread=" + Thread.currentThread().getName(), Log.DEBUG_MODE);
+
 		return new TiUIImageView(this);
 	}
 

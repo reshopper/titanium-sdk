@@ -99,6 +99,7 @@ public:
 	static jclass v8PromiseClass;
 	static jclass v8ObjectClass;
 	static jclass v8FunctionClass;
+	static jclass v8RuntimeClass;
 	static jclass krollRuntimeClass;
 	static jclass krollInvocationClass;
 	static jclass krollExceptionClass;
@@ -183,6 +184,14 @@ public:
 
 	// CustomError
 	static jmethodID getJSPropertiesMethod;
+
+	static jfieldID krollResultSuccessField;
+	static jfieldID krollResultResultField;
+
+	static jmethodID krollRuntimeGetReferenceTableMethod;
+	static jmethodID v8RuntimeFireUnhandledRejectionMethod;
+
+	static void dispose();
 
 };
 

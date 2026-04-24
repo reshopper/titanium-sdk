@@ -60,7 +60,9 @@ import ti.modules.titanium.ui.widget.TiUIListView;
 		TiC.PROPERTY_SHOW_VERTICAL_SCROLL_INDICATOR,
 		TiC.PROPERTY_TEMPLATES,
 		TiC.PROPERTY_TOUCH_FEEDBACK,
-		TiC.PROPERTY_TOUCH_FEEDBACK_COLOR
+		TiC.PROPERTY_TOUCH_FEEDBACK_COLOR,
+		TiC.PROPERTY_CLIP_VIEWS,
+		TiC.PROPERTY_PADDING
 	}
 )
 public class ListViewProxy extends RecyclerViewProxy
@@ -865,6 +867,71 @@ public class ListViewProxy extends RecyclerViewProxy
 						action.run();
 					}
 				}
+			}
+		}
+	}
+
+	/**
+	 * Scroll to the bottom of the list.
+	 *
+	 * @param animation Optional animation dictionary. Supports "animated" (bool) and "position" (int, TOP=0)
+	 */
+	@Kroll.method
+	public void scrollToBottom(@Kroll.argument(optional = true) KrollDict animation)
+	{
+		final TiListView listView = getListView();
+		final boolean animated = animation == null || animation.optBoolean(TiC.PROPERTY_ANIMATED, true);
+		final int position = animation != null ? animation.optInt(TiC.PROPERTY_POSITION, 0) : 0;
+		final RecyclerView.SmoothScroller smoothScrollerToTop =
+			new LinearSmoothScroller(TiApplication.getAppCurrentActivity())
+			{
+				@Override
+				protected int getVerticalSnapPreference()
+				{ return LinearSmoothScroller.SNAP_TO_START; }
+			};
+
+		if (listView != null) {
+			final RecyclerView recyclerView = listView.getRecyclerView();
+			final LinearLayoutManager lm = listView.getLayoutManager();
+			final int lastAdapterIndex = listView.getAdapter().getItemCount() - 1;
+
+			if (lastAdapterIndex < 0) {
+				return;
+			}
+
+			final Runnable action = () -> {
+				if (animated) {
+					if (position == ListViewScrollPositionModule.TOP) {
+						// Snap last item to top
+						smoothScrollerToTop.setTargetPosition(lastAdapterIndex);
+						recyclerView.getLayoutManager().startSmoothScroll(smoothScrollerToTop);
+					} else {
+						// Default: smooth scroll so that last item becomes visible (at bottom)
+						recyclerView.smoothScrollToPosition(lastAdapterIndex);
+					}
+				} else {
+					if (position == ListViewScrollPositionModule.TOP) {
+						// Place last item at top without animation
+						lm.scrollToPositionWithOffset(lastAdapterIndex, 0);
+					} else {
+						recyclerView.scrollToPosition(lastAdapterIndex);
+					}
+				}
+			};
+
+			// If layout is not ready yet, wait for layout pass
+			if (!listView.getHasLaidOutChildren()) {
+				listView.addOnLayoutChangeListener(new View.OnLayoutChangeListener()
+				{
+					@Override
+					public void onLayoutChange(View view, int i, int i1, int i2, int i3, int i4, int i5, int i6, int i7)
+					{
+						action.run();
+						listView.removeOnLayoutChangeListener(this);
+					}
+				});
+			} else {
+				action.run();
 			}
 		}
 	}

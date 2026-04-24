@@ -32,6 +32,13 @@ public class V8Promise<V extends Object> extends V8Object implements KrollPromis
 	@Override
 	public void resolve(V value)
 	{
+		// Avoid resolving if runtime is disposed
+		if (KrollRuntime.isDisposed()) {
+			return;
+		}
+		if (getPointer() == 0) {
+			return;
+		}
 		if (KrollRuntime.getInstance().isRuntimeThread()) {
 			nativeResolve(getPointer(), value);
 		} else {
@@ -42,6 +49,13 @@ public class V8Promise<V extends Object> extends V8Object implements KrollPromis
 	@Override
 	public void reject(Object value)
 	{
+		// Avoid rejecting if runtime is disposed
+		if (KrollRuntime.isDisposed()) {
+			return;
+		}
+		if (getPointer() == 0) {
+			return;
+		}
 		if (KrollRuntime.getInstance().isRuntimeThread()) {
 			nativeReject(getPointer(), value);
 		} else {
@@ -54,6 +68,12 @@ public class V8Promise<V extends Object> extends V8Object implements KrollPromis
 	{
 		switch (message.what) {
 			case MSG_RESOLVE: {
+				if (KrollRuntime.isDisposed()) {
+					return true;
+				}
+				if (getPointer() == 0) {
+					return true;
+				}
 				AsyncResult asyncResult = ((AsyncResult) message.obj);
 				Object value = asyncResult.getArg();
 				nativeResolve(getPointer(), value);
@@ -61,6 +81,12 @@ public class V8Promise<V extends Object> extends V8Object implements KrollPromis
 				return true;
 			}
 			case MSG_REJECT: {
+				if (KrollRuntime.isDisposed()) {
+					return true;
+				}
+				if (getPointer() == 0) {
+					return true;
+				}
 				AsyncResult asyncResult = ((AsyncResult) message.obj);
 				Object value = asyncResult.getArg();
 				nativeReject(getPointer(), value);

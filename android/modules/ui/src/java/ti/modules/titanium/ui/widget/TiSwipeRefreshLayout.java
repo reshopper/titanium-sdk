@@ -141,14 +141,16 @@ public class TiSwipeRefreshLayout extends SwipeRefreshLayout
 			// - Mode is AT_MOST and child size is less than given size. (Makes WRAP_CONTENT work.)
 			if (widthMode != MeasureSpec.EXACTLY) {
 				int containerWidth = MeasureSpec.getSize(widthMeasureSpec);
-				if ((widthMode == MeasureSpec.UNSPECIFIED) || (minWidth < containerWidth)) {
+				// Only shrink to child size if it's > 0; avoid forcing width=0 when empty.
+				if ((widthMode == MeasureSpec.UNSPECIFIED) || (minWidth > 0 && minWidth < containerWidth)) {
 					widthMode = MeasureSpec.AT_MOST;
 					widthMeasureSpec = MeasureSpec.makeMeasureSpec(minWidth, widthMode);
 				}
 			}
 			if (heightMode != MeasureSpec.EXACTLY) {
 				int containerHeight = MeasureSpec.getSize(heightMeasureSpec);
-				if ((heightMode == MeasureSpec.UNSPECIFIED) || (minHeight < containerHeight)) {
+				// Only shrink to child size if it's > 0; avoid forcing height=0 when empty.
+				if ((heightMode == MeasureSpec.UNSPECIFIED) || (minHeight > 0 && minHeight < containerHeight)) {
 					heightMode = MeasureSpec.AT_MOST;
 					heightMeasureSpec = MeasureSpec.makeMeasureSpec(minHeight, heightMode);
 				}

@@ -500,6 +500,62 @@ MAKE_SYSTEM_PROP(BATTERY_STATE_UNPLUGGED, UIDeviceBatteryStateUnplugged);
 MAKE_SYSTEM_PROP(BATTERY_STATE_CHARGING, UIDeviceBatteryStateCharging);
 MAKE_SYSTEM_PROP(BATTERY_STATE_FULL, UIDeviceBatteryStateFull);
 
+#pragma mark Debug Lifecycle Tracking
+
+// Debug lifecycle tracking methods
+- (NSNumber *)getLifecycleProxyCount:(id)args
+{
+#ifdef DEBUG
+  // iOS tracking is built into TiProxy.m with PROXY_MEMORY_TRACK
+  // Use the class method to get current proxy count
+  return NUMINT([TiProxy currentProxyCount]);
+#else
+  return NUMINT(0);
+#endif
+}
+
+- (NSNumber *)getLifecycleViewCount:(id)args
+{
+#ifdef DEBUG
+  // iOS doesn't have separate view tracking yet, return 0 for now
+  // Could be enhanced to track TiUIView instances
+  return NUMINT(0);
+#else
+  return NUMINT(0);
+#endif
+}
+
+- (void)printLifecycleStats:(id)args
+{
+#ifdef DEBUG
+  NSInteger proxyCount = [TiProxy currentProxyCount];
+  NSLog(@"[LIFECYCLE] === iOS Lifecycle Statistics ===");
+  NSLog(@"[LIFECYCLE] Live Proxies: %ld", (long)proxyCount);
+  NSLog(@"[LIFECYCLE] Live Views: 0 (not tracked on iOS yet)");
+  NSLog(@"[LIFECYCLE] ==============================");
+#else
+  NSLog(@"[LIFECYCLE] Lifecycle tracking only available in debug builds");
+#endif
+}
+
+- (void)resetLifecycleStats:(id)args
+{
+#ifdef DEBUG
+  NSLog(@"[LIFECYCLE] Reset not supported on iOS (uses atomic counters)");
+#else
+  NSLog(@"[LIFECYCLE] Lifecycle tracking only available in debug builds");
+#endif
+}
+
+- (NSString *)getViewProxyId:(id)view
+{
+  if ([view isKindOfClass:[TiProxy class]]) {
+    TiProxy *proxy = (TiProxy *)view;
+    return [proxy proxyId];
+  }
+  return nil;
+}
+
 #pragma mark Delegates
 
 - (void)batteryStateChanged:(NSNotification *)note

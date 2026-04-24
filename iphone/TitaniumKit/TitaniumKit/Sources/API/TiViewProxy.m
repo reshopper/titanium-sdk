@@ -17,18 +17,9 @@
 #import "TiUIWindowProxy.h"
 #import "TiWindowProxy.h"
 #import <QuartzCore/QuartzCore.h>
+#import <TitaniumKit/KrollPromise.h>
 #import <libkern/OSAtomic.h>
-
-static void *destroyQueueKey = &destroyQueueKey;
-
-static inline void DestroyQueuePerform(dispatch_queue_t queue, dispatch_block_t block)
-{
-  if (dispatch_get_specific(destroyQueueKey) == destroyQueueKey) {
-    block();
-  } else {
-    dispatch_sync(queue, block);
-  }
-}
+#import <pthread.h>
 
 #define IGNORE_IF_NOT_OPENED                 \
   if (!windowOpened || ![self viewAttached]) \
@@ -67,10 +58,9 @@ static NSArray *touchEventsArray;
     return [result autorelease];
   }
 
-  __block NSArray *copy = nil;
-  dispatch_sync(childrenQueue, ^{
-    copy = [children mutableCopy];
-  });
+  pthread_rwlock_rdlock(&childrenLock);
+  NSArray *copy = [children mutableCopy];
+  pthread_rwlock_unlock(&childrenLock);
   return ((copy != nil) ? [copy autorelease] : [NSMutableArray array]);
 }
 
@@ -213,13 +203,12 @@ static NSArray *touchEventsArray;
 
   [self rememberProxy:childView];
   // Lock the assignment of the position to prevent race-conditions
-  __block int blockPosition = position;
-  dispatch_barrier_sync(childrenQueue, ^{
-    if (blockPosition < 0 || blockPosition > [children count]) {
-      blockPosition = (int)[children count];
-    }
-    [children insertObject:childView atIndex:blockPosition];
-  });
+  pthread_rwlock_wrlock(&childrenLock);
+  if (position < 0 || position > [children count]) {
+    position = (int)[children count];
+  }
+  [children insertObject:childView atIndex:position];
+  pthread_rwlock_unlock(&childrenLock);
 
   [childView setParent:self];
 
@@ -322,13 +311,12 @@ static NSArray *touchEventsArray;
 
   ENSURE_SINGLE_ARG(arg, TiViewProxy);
 
-  __block NSMutableArray *childrenCopy = nil;
-  dispatch_barrier_sync(childrenQueue, ^{
-    childrenCopy = [children mutableCopy];
-    if ([children containsObject:arg]) {
-      [children removeObject:arg];
-    }
-  });
+  pthread_rwlock_wrlock(&childrenLock);
+  NSMutableArray *childrenCopy = [children mutableCopy];
+  if ([children containsObject:arg]) {
+    [children removeObject:arg];
+  }
+  pthread_rwlock_unlock(&childrenLock);
 
   if ([childrenCopy containsObject:arg]) {
     [arg windowWillClose];
@@ -353,12 +341,11 @@ static NSArray *touchEventsArray;
   }
 
   ENSURE_UI_THREAD_1_ARG(arg);
-  __block NSMutableArray *childrenCopy = nil;
-  dispatch_barrier_sync(childrenQueue, ^{
-    childrenCopy = [children mutableCopy];
-    [children removeAllObjects];
-    RELEASE_TO_NIL(children);
-  });
+  pthread_rwlock_wrlock(&childrenLock);
+  NSMutableArray *childrenCopy = [children mutableCopy];
+  [children removeAllObjects];
+  RELEASE_TO_NIL(children);
+  pthread_rwlock_unlock(&childrenLock);
   for (TiViewProxy *theChild in childrenCopy) {
     [theChild windowWillClose];
     [theChild setParentVisible:NO];
@@ -755,6 +742,147 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
       (callback == nil));
 
   return blob;
+}
+
+// measure(options?, callback?) -> Promise
+- (JSValue *)measure:(id)args
+{
+  NSDictionary *options = nil;
+  JSValue *callback = nil;
+
+  if ([args isKindOfClass:[NSArray class]] && [args count] > 0) {
+    id first = [args objectAtIndex:0];
+    if ([first isKindOfClass:[NSDictionary class]]) {
+      options = (NSDictionary *)first;
+    }
+    if ([args count] > 1) {
+      id second = [args objectAtIndex:1];
+      if ([second isKindOfClass:[JSValue class]]) {
+        callback = (JSValue *)second;
+      }
+    }
+  }
+
+  KrollPromise *promise = [[[KrollPromise alloc] initInContext:[self currentContext]] autorelease];
+
+  TiThreadPerformOnMainThread(
+      ^{
+        @try {
+          BOOL wasAttached = [self viewAttached];
+          if (!wasAttached) {
+            [self windowWillOpen];
+          }
+
+          TiUIView *myview = [self view];
+
+          CGFloat optWidth = 0;
+          CGFloat optHeight = 0;
+          CGFloat maxWidth = 0;
+          CGFloat maxHeight = 0;
+          if ([options isKindOfClass:[NSDictionary class]]) {
+            id w = [options objectForKey:@"width"];
+            id h = [options objectForKey:@"height"];
+            id mw = [options objectForKey:@"maxWidth"];
+            id mh = [options objectForKey:@"maxHeight"];
+            if (w != nil) {
+              optWidth = [TiUtils floatValue:w];
+            }
+            if (h != nil) {
+              optHeight = [TiUtils floatValue:h];
+            }
+            if (mw != nil) {
+              maxWidth = [TiUtils floatValue:mw];
+            }
+            if (mh != nil) {
+              maxHeight = [TiUtils floatValue:mh];
+            }
+          }
+
+          CGSize screenSize = [UIScreen mainScreen].bounds.size;
+          CGFloat constraintW = optWidth > 0 ? optWidth : (maxWidth > 0 ? maxWidth : screenSize.width);
+          CGFloat constraintH = optHeight > 0 ? optHeight : (maxHeight > 0 ? maxHeight : CGFLOAT_MAX);
+
+          void (^doMeasure)(void) = ^{
+#ifndef TI_USE_AUTOLAYOUT
+            // Compute width/height using autosizing helpers
+            CGFloat width = optWidth > 0 ? optWidth : [self autoWidthForSize:CGSizeMake(constraintW, constraintH == CGFLOAT_MAX ? 1000 : constraintH)];
+            CGFloat height;
+            if (optHeight > 0) {
+              height = optHeight;
+            } else {
+              height = [self autoHeightForSize:CGSizeMake(width, (constraintH == CGFLOAT_MAX ? 1000000 : constraintH))];
+            }
+#else
+            CGSize s = [myview sizeThatFits:CGSizeMake(constraintW, constraintH)];
+            CGFloat width = (optWidth > 0) ? optWidth : s.width;
+            CGFloat height = (optHeight > 0) ? optHeight : s.height;
+#endif
+
+            NSMutableDictionary *result = [NSMutableDictionary dictionaryWithCapacity:2];
+            // Values are in points (DIP)
+            result[@"width"] = NUMFLOAT(width);
+            result[@"height"] = NUMFLOAT(height);
+
+            if (callback && ![callback isUndefined]) {
+              [callback callWithArguments:@[ result ]];
+            }
+            [promise resolve:@[ result ]];
+          };
+
+          // Retry if minimum constraints were requested and not yet satisfied
+          __block NSInteger framesLeft = 3;
+          __block BOOL satisfied = NO;
+          CGFloat minWidth = 0;
+          CGFloat minHeight = 0;
+          if ([options isKindOfClass:[NSDictionary class]]) {
+            id mwmin = [options objectForKey:@"minWidth"];
+            id mhmin = [options objectForKey:@"minHeight"];
+            if (mwmin) {
+              minWidth = [TiUtils floatValue:mwmin];
+            }
+            if (mhmin) {
+              minHeight = [TiUtils floatValue:mhmin];
+            }
+            id mf = [options objectForKey:@"maxFrames"];
+            if (mf) {
+              framesLeft = (NSInteger)[TiUtils intValue:mf];
+            }
+          }
+
+          void (^tryMeasure)(void) = ^{
+            doMeasure();
+            CGSize s = [myview bounds].size;
+            satisfied = ((minWidth <= 0 || s.width >= minWidth) && (minHeight <= 0 || s.height >= minHeight));
+            if (!satisfied && framesLeft > 0) {
+              framesLeft--;
+              dispatch_async(dispatch_get_main_queue(), tryMeasure);
+            }
+          };
+
+          BOOL attached = wasAttached && (myview.window != nil);
+          BOOL needsDeferral = attached && (CGSizeEqualToSize(myview.bounds.size, CGSizeZero));
+          if (needsDeferral) {
+            dispatch_async(dispatch_get_main_queue(), tryMeasure);
+          } else {
+            tryMeasure();
+          }
+        } @catch (NSException *ex) {
+          if (callback && ![callback isUndefined]) {
+            JSValue *err = [JSValue valueWithNewErrorFromMessage:ex.reason inContext:[self currentContext]];
+            [callback callWithArguments:@[ err ]];
+          }
+          [promise rejectWithErrorMessage:ex.reason];
+        }
+      },
+      NO);
+
+  return promise.JSValue;
+}
+
+// measureActualDimensions(options?, callback?) -> Promise (alias of measure)
+- (JSValue *)measureActualDimensions:(id)args
+{
+  return [self measure:args];
 }
 
 - (TiPoint *)contentOffset
@@ -1205,27 +1333,28 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
     [self parentWillShow];
   }
 
-  __block NSArray *childrenSnapshot = nil;
-  __block BOOL wasAlreadyOpened = NO;
-  dispatch_sync(childrenQueue, ^{
-    if (windowOpened) {
-      wasAlreadyOpened = YES;
-      return;
-    }
-    windowOpened = YES;
-    windowOpening = YES;
-    childrenSnapshot = [children copy];
-  });
+  pthread_rwlock_rdlock(&childrenLock);
 
-  if (wasAlreadyOpened) {
+  // this method is called just before the top level window
+  // that this proxy is part of will open and is ready for
+  // the views to be attached
+
+  if (windowOpened) {
+    pthread_rwlock_unlock(&childrenLock);
     return;
   }
+
+  windowOpened = YES;
+  windowOpening = YES;
 
 #ifndef TI_USE_AUTOLAYOUT
   BOOL absoluteLayout = TiLayoutRuleIsAbsolute(layoutProperties.layoutStyle);
 #endif
-  if (childrenSnapshot != nil) {
-    for (TiViewProxy *child in childrenSnapshot) {
+  // If the window was previously opened, it may need to have
+  // its existing children redrawn
+  // Maybe need to call layout children instead for non absolute layout
+  if (children != nil) {
+    for (TiViewProxy *child in children) {
 #ifndef TI_USE_AUTOLAYOUT
       if (absoluteLayout) {
         [self layoutChild:child optimize:NO withMeasuredBounds:[[self size] rect]];
@@ -1233,8 +1362,9 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
 #endif
       [child windowWillOpen];
     }
-    [childrenSnapshot release];
   }
+
+  pthread_rwlock_unlock(&childrenLock);
 
 #ifndef TI_USE_AUTOLAYOUT
   // TIMOB-17923 - Do a full layout pass (set proper sandbox) if non absolute layout
@@ -1389,9 +1519,8 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
 - (id)init
 {
   if ((self = [super init])) {
-    destroyQueue = dispatch_queue_create("ti.viewproxy.destroy", DISPATCH_QUEUE_SERIAL);
-    dispatch_queue_set_specific(destroyQueue, destroyQueueKey, destroyQueueKey, NULL);
-    childrenQueue = dispatch_queue_create("ti.viewproxy.children", DISPATCH_QUEUE_CONCURRENT);
+    destroyLock = [[NSRecursiveLock alloc] init];
+    pthread_rwlock_init(&childrenLock, NULL);
     _bubbleParent = YES;
   }
   return self;
@@ -1465,6 +1594,17 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
       }
     }
   }
+  // Extract 'children' before property processing so it doesn't bypass add:
+  NSArray *childrenToAdd = nil;
+  if (properties != nil) {
+    childrenToAdd = [properties objectForKey:@"children"];
+    if (childrenToAdd != nil) {
+      NSMutableDictionary *filtered = [NSMutableDictionary dictionaryWithDictionary:properties];
+      [filtered removeObjectForKey:@"children"];
+      properties = filtered;
+    }
+  }
+
   [super _initWithProperties:properties];
   updateStarted = NO;
   allowLayoutUpdate = YES;
@@ -1472,6 +1612,12 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
   allowLayoutUpdate = NO;
 
   [self createSafeAreaViewProxyForWindowProperties:properties];
+
+  if (childrenToAdd != nil) {
+    for (id child in childrenToAdd) {
+      [self add:child];
+    }
+  }
 }
 
 - (void)createSafeAreaViewProxyForWindowProperties:(NSDictionary *)properties
@@ -1506,9 +1652,10 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
 - (void)dealloc
 {
   //	RELEASE_TO_NIL(pendingAdds);
-  // Note: destroyQueue and childrenQueue are released in _destroy,
-  // which is called by [super dealloc] via TiProxy. Releasing them
-  // here would cause use-after-free since _destroy still needs them.
+  RELEASE_TO_NIL(destroyLock);
+  pthread_rwlock_destroy(&childrenLock);
+
+  // Dealing with children is in _destroy, which is called by super dealloc.
   RELEASE_TO_NIL(barButtonItem);
   [super dealloc];
 }
@@ -1546,85 +1693,78 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
   return [[TiUIView alloc] initWithFrame:[self appFrame]];
 }
 
-- (void)performOnDestroyQueue:(dispatch_block_t)block
-{
-  if (!destroyQueue) {
-    return;
-  }
-  DestroyQueuePerform(destroyQueue, block);
-}
-
 - (void)detachView
 {
-  if (!destroyQueue) {
-    return;
-  }
-  DestroyQueuePerform(destroyQueue, ^{
-    if (view != nil) {
-      [self viewWillDetach];
-      [[view retain] autorelease];
-      view.proxy = nil;
-      if (self.modelDelegate != nil && [self.modelDelegate respondsToSelector:@selector(detachProxy)]) {
-        [self.modelDelegate detachProxy];
-      }
-      self.modelDelegate = nil;
-      [view removeFromSuperview];
-      RELEASE_TO_NIL(view);
-      [self viewDidDetach];
+  [destroyLock lock];
+  if (view != nil) {
+    [self viewWillDetach];
+    // hold the view during detachment -- but we can't release it immediately.
+    // What if it (or a superview or subview) is in the middle of an animation?
+    // We probably need to be even MORE careful here.
+    [[view retain] autorelease];
+    view.proxy = nil;
+    if (self.modelDelegate != nil && [self.modelDelegate respondsToSelector:@selector(detachProxy)]) {
+      [self.modelDelegate detachProxy];
     }
-    [[self children] makeObjectsPerformSelector:@selector(detachView)];
-  });
+    self.modelDelegate = nil;
+    [view removeFromSuperview];
+    RELEASE_TO_NIL(view);
+    [self viewDidDetach];
+  }
+
+  [[self children] makeObjectsPerformSelector:@selector(detachView)];
+  [destroyLock unlock];
 }
 
 - (void)_destroy
 {
-  if (!destroyQueue) {
-    // Queue not initialized or already released by a prior _destroy call.
-    [super _destroy];
+  [destroyLock lock];
+  if ([self destroyed]) {
+    // not safe to do multiple times given rwlock
+    [destroyLock unlock];
     return;
   }
+  // _destroy is called during a JS context shutdown, to inform the object to
+  // release all its memory and references.  this will then cause dealloc
+  // on objects that it contains (assuming we don't have circular references)
+  // since some of these objects are registered in the context and thus still
+  // reachable, we need _destroy to help us start the unreferencing part
 
-  DestroyQueuePerform(destroyQueue, ^{
-    if ([self destroyed]) {
-      return;
+  pthread_rwlock_wrlock(&childrenLock);
+  [children makeObjectsPerformSelector:@selector(setParent:) withObject:nil];
+  RELEASE_TO_NIL(children);
+  pthread_rwlock_unlock(&childrenLock);
+  [super _destroy];
+
+  // Part of super's _destroy is to release the modelDelegate, which in our case is ALSO the view.
+  // As such, we need to have the super happen before we release the view, so that we can insure that the
+  // release that triggers the dealloc happens on the main thread.
+
+  if (barButtonItem != nil) {
+    if ([NSThread isMainThread]) {
+      RELEASE_TO_NIL(barButtonItem);
+    } else {
+      TiThreadPerformOnMainThread(
+          ^{
+            RELEASE_TO_NIL(barButtonItem);
+          },
+          NO);
     }
-    dispatch_barrier_sync(childrenQueue, ^{
-      [children makeObjectsPerformSelector:@selector(setParent:) withObject:nil];
-      RELEASE_TO_NIL(children);
-    });
-    [super _destroy];
+  }
 
-    if (barButtonItem != nil) {
-      if ([NSThread isMainThread]) {
-        RELEASE_TO_NIL(barButtonItem);
-      } else {
-        TiThreadPerformOnMainThread(
-            ^{
-              RELEASE_TO_NIL(barButtonItem);
-            },
-            NO);
-      }
+  if (view != nil) {
+    if ([NSThread isMainThread]) {
+      [self detachView];
+    } else {
+      view.proxy = nil;
+      TiThreadPerformOnMainThread(
+          ^{
+            RELEASE_TO_NIL(view);
+          },
+          YES);
     }
-
-    if (view != nil) {
-      if ([NSThread isMainThread]) {
-        [self detachView];
-      } else {
-        view.proxy = nil;
-        TiThreadPerformOnMainThread(
-            ^{
-              RELEASE_TO_NIL(view);
-            },
-            YES);
-      }
-    }
-  });
-
-  // Safe to release after dispatch_sync returns — the queues are no longer needed.
-  dispatch_release(childrenQueue);
-  childrenQueue = nil;
-  dispatch_release(destroyQueue);
-  destroyQueue = nil;
+  }
+  [destroyLock unlock];
 }
 
 - (void)destroy
@@ -1859,9 +1999,9 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
 
   [self willEnqueueIfVisible];
   [parent contentsWillChange];
-  dispatch_sync(childrenQueue, ^{
-    [children makeObjectsPerformSelector:@selector(parentSizeWillChange)];
-  });
+  pthread_rwlock_rdlock(&childrenLock);
+  [children makeObjectsPerformSelector:@selector(parentSizeWillChange)];
+  pthread_rwlock_unlock(&childrenLock);
 #endif
 }
 
@@ -1896,9 +2036,9 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
   SET_AND_PERFORM(TiRefreshViewZIndex, );
   [parent contentsWillChange];
 
-  dispatch_sync(childrenQueue, ^{
-    [children makeObjectsPerformSelector:@selector(parentWillShow)];
-  });
+  pthread_rwlock_rdlock(&childrenLock);
+  [children makeObjectsPerformSelector:@selector(parentWillShow)];
+  pthread_rwlock_unlock(&childrenLock);
 }
 
 - (void)willHide;
@@ -1908,9 +2048,9 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
 
   [self willEnqueue];
 
-  dispatch_sync(childrenQueue, ^{
-    [children makeObjectsPerformSelector:@selector(parentWillHide)];
-  });
+  pthread_rwlock_rdlock(&childrenLock);
+  [children makeObjectsPerformSelector:@selector(parentWillHide)];
+  pthread_rwlock_unlock(&childrenLock);
 }
 
 - (void)willChangeLayout
@@ -1919,9 +2059,9 @@ LAYOUTFLAGS_SETTER(setHorizontalWrap, horizontalWrap, horizontalWrap, [self will
 
   [self willEnqueueIfVisible];
 
-  dispatch_sync(childrenQueue, ^{
-    [children makeObjectsPerformSelector:@selector(parentWillRelay)];
-  });
+  pthread_rwlock_rdlock(&childrenLock);
+  [children makeObjectsPerformSelector:@selector(parentWillRelay)];
+  pthread_rwlock_unlock(&childrenLock);
 }
 
 - (BOOL)widthIsAutoSize

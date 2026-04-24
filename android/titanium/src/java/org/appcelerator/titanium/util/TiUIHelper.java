@@ -14,9 +14,9 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -99,8 +99,8 @@ public class TiUIHelper
 	public static final String MIME_TYPE_PNG = "image/png";
 
 	private static Method overridePendingTransition;
-	private static final Map<String, String> resourceImageKeys = new ConcurrentHashMap<>();
-	private static final Map<String, Typeface> mCustomTypeFaces = new ConcurrentHashMap<>();
+	private static final Map<String, String> resourceImageKeys = Collections.synchronizedMap(new HashMap<>());
+	private static final Map<String, Typeface> mCustomTypeFaces = Collections.synchronizedMap(new HashMap<>());
 
 	public static OnClickListener createDoNothingListener()
 	{
@@ -425,12 +425,11 @@ public class TiUIHelper
 
 	private static Typeface loadTypeface(Context context, String fontFamily)
 	{
-		if (context == null || fontFamily == null) {
+		if (context == null) {
 			return null;
 		}
-		Typeface cached = mCustomTypeFaces.get(fontFamily);
-		if (cached != null || mCustomTypeFaces.containsKey(fontFamily)) {
-			return cached;
+		if (mCustomTypeFaces.containsKey(fontFamily)) {
+			return mCustomTypeFaces.get(fontFamily);
 		}
 		AssetManager mgr = context.getAssets();
 		try {
@@ -439,7 +438,10 @@ public class TiUIHelper
 				if (f.equalsIgnoreCase(fontFamily)
 					|| f.toLowerCase().startsWith(fontFamily.toLowerCase() + ".")) {
 					Typeface tf = Typeface.createFromAsset(mgr, customFontPath + "/" + f);
-					mCustomTypeFaces.put(fontFamily, tf);
+					synchronized (mCustomTypeFaces)
+					{
+						mCustomTypeFaces.put(fontFamily, tf);
+					}
 					return tf;
 				}
 			}
@@ -447,6 +449,7 @@ public class TiUIHelper
 			Log.e(TAG, "Unable to load 'fonts' assets. Perhaps doesn't exist? " + e.getMessage());
 		}
 
+		mCustomTypeFaces.put(fontFamily, null);
 		return null;
 	}
 
@@ -841,11 +844,27 @@ public class TiUIHelper
 			// set a default BS value if the dimension is still 0 and log a warning
 			if (width == 0) {
 				width = 100;
-				Log.e(TAG, "Width property is 0 for view, display view before calling toImage()", Log.DEBUG_MODE);
+				String viewClass = (view != null) ? view.getClass().getSimpleName() : "null";
+				String idInfo = null;
+				if (proxyDict != null && proxyDict.containsKey(TiC.PROPERTY_ID)) {
+					idInfo = proxyDict.getString(TiC.PROPERTY_ID);
+				}
+				String suffix = " (view=" + viewClass + (idInfo != null ? ", id=" + idInfo : "") + ")";
+				Log.e(TAG,
+					"Width property is 0 for view, display view before calling toImage()" + suffix,
+					Log.DEBUG_MODE);
 			}
 			if (height == 0) {
 				height = 100;
-				Log.e(TAG, "Height property is 0 for view, display view before calling toImage()", Log.DEBUG_MODE);
+				String viewClass = (view != null) ? view.getClass().getSimpleName() : "null";
+				String idInfo = null;
+				if (proxyDict != null && proxyDict.containsKey(TiC.PROPERTY_ID)) {
+					idInfo = proxyDict.getString(TiC.PROPERTY_ID);
+				}
+				String suffix = " (view=" + viewClass + (idInfo != null ? ", id=" + idInfo : "") + ")";
+				Log.e(TAG,
+					"Height property is 0 for view, display view before calling toImage()" + suffix,
+					Log.DEBUG_MODE);
 			}
 
 			if (view.getParent() == null) {
@@ -1239,6 +1258,12 @@ public class TiUIHelper
 	 */
 	public static String getBackgroundColorForState(TiBackgroundDrawable backgroundDrawable, int[] state)
 	{
+		return getBackgroundColorForState(backgroundDrawable, state, null);
+	}
+
+	public static String getBackgroundColorForState(TiBackgroundDrawable backgroundDrawable, int[] state,
+		KrollProxy proxy)
+	{
 		try {
 			// TiBackgroundDrawable's background can be either PaintDrawable or StateListDrawable.
 			// Handle the cases separately.
@@ -1274,19 +1299,60 @@ public class TiUIHelper
 						return strColor;
 					} else {
 						Log.w(TAG, "Background drawable of unexpected type. Expected - ColorDrawable. Found - "
-									   + drawableFromLayer.getClass().toString());
+									   + drawableFromLayer.getClass().toString() + buildProxySuffix(proxy));
 						return null;
 					}
 				} else {
 					Log.w(TAG, "Background drawable of unexpected type. Expected - LayerDrawable. Found - "
-								   + drawable.getClass().toString());
+								   + drawable.getClass().toString() + buildProxySuffix(proxy));
 					return null;
 				}
 			}
 		} catch (Exception e) {
-			Log.w(TAG, e.toString());
+			Log.w(TAG, e.toString() + buildProxySuffix(proxy));
 		}
 		return null;
+	}
+
+	private static String buildProxySuffix(KrollProxy proxy)
+	{
+		if (proxy == null) {
+			return "";
+		}
+		String api = null;
+		try {
+			api = proxy.getApiName();
+		} catch (Throwable t) {
+			api = null;
+		}
+		String id = null;
+		try {
+			Object v = proxy.getProperty(TiC.PROPERTY_ID);
+			if (v != null) {
+				id = String.valueOf(v);
+			}
+		} catch (Throwable t) {
+			id = null;
+		}
+		String url = null;
+		try {
+			if (proxy.getCreationUrl() != null) {
+				url = proxy.getCreationUrl().getNormalizedUrl();
+			}
+		} catch (Throwable t) {
+			url = null;
+		}
+		StringBuilder sb = new StringBuilder();
+		sb.append(" (proxy=");
+		sb.append(api != null ? api : "?");
+		if (id != null) {
+			sb.append(", id=").append(id);
+		}
+		if (url != null) {
+			sb.append(", url=").append(url);
+		}
+		sb.append(")");
+		return sb.toString();
 	}
 
 	/**

@@ -10,7 +10,7 @@
 #import "TiExceptionHandler.h"
 
 static NSMutableArray *callbacks;
-static dispatch_queue_t callbackQueue;
+static NSLock *callbackLock;
 
 @interface KrollCallback ()
 @property (nonatomic, assign) KrollContext *context;
@@ -22,19 +22,19 @@ static dispatch_queue_t callbackQueue;
 
 + (void)shutdownContext:(KrollContext *)context
 {
-  dispatch_sync(callbackQueue, ^{
-    for (KrollCallback *callback in callbacks) {
-      if ([callback context] == context) {
-        callback.context = nil;
-      }
+  [callbackLock lock];
+  for (KrollCallback *callback in callbacks) {
+    if ([callback context] == context) {
+      callback.context = nil;
     }
-  });
+  }
+  [callbackLock unlock];
 }
 
 + (void)initialize
 {
   if (callbacks == nil) {
-    callbackQueue = dispatch_queue_create("org.appcelerator.kroll.callbacks", DISPATCH_QUEUE_SERIAL);
+    callbackLock = [[NSLock alloc] init];
     callbacks = TiCreateNonRetainingArray();
   }
 }
@@ -56,9 +56,9 @@ static dispatch_queue_t callbackQueue;
 
 - (void)dealloc
 {
-  dispatch_sync(callbackQueue, ^{
-    [callbacks removeObject:self];
-  });
+  [callbackLock lock];
+  [callbacks removeObject:self];
+  [callbackLock unlock];
 
   [type release];
   if ([KrollBridge krollBridgeExists:bridge]) {

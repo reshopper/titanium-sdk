@@ -49,6 +49,11 @@
   return _proxy;
 }
 
+- (void)releaseProxy
+{
+  _proxy = nil;
+}
+
 #ifdef DEVELOPER
 - (void)viewWillLayoutSubviews
 {

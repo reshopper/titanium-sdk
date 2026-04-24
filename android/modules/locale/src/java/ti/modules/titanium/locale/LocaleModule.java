@@ -150,6 +150,39 @@ public class LocaleModule extends KrollModule
 		return getSupportedFormatLocales(requestedLocaleStrings, availableLocales);
 	}
 
+	/**
+	 * Undocumented method used to implement the JavaScript Intl.DisplayNames.supportedLocalesOf() static method.
+	 * @param locales Can be a string or array of strings providing the locale IDs to search for. Can be null.
+	 * @param options The Intl.DisplayNames.supportedLocalesOf() argument. Currently ignored.
+	 * @return
+	 * Returns a subset of locale IDs from the given argument that are supported by the system.
+	 * Returns an empty array if none of the locales are supported or if given a null locales argument.
+	 */
+	@Kroll.method
+	public String[] getSupportedDisplayNamesLocales(Object locales, @Kroll.argument(optional = true) String options)
+	{
+		String[] requestedLocaleStrings = getLocaleStringArrayFrom(locales);
+		Locale[] availableLocales = Locale.getAvailableLocales();
+		return getSupportedFormatLocales(requestedLocaleStrings, availableLocales);
+	}
+
+	/**
+	 * Undocumented method used to implement the JavaScript Intl.RelativeTimeFormat.supportedLocalesOf() static method.
+	 * @param locales Can be a string or array of strings providing the locale IDs to search for. Can be null.
+	 * @param options The Intl.RelativeTimeFormat.supportedLocalesOf() argument. Currently ignored.
+	 * @return
+	 * Returns a subset of locale IDs from the given argument that are supported by the system.
+	 * Returns an empty array if none of the locales are supported or if given a null locales argument.
+	 */
+	@Kroll.method
+	public String[] getSupportedRelativeTimeFormatLocales(
+		Object locales, @Kroll.argument(optional = true) String options)
+	{
+		String[] requestedLocaleStrings = getLocaleStringArrayFrom(locales);
+		Locale[] availableLocales = Locale.getAvailableLocales();
+		return getSupportedFormatLocales(requestedLocaleStrings, availableLocales);
+	}
+
 	@SuppressWarnings("deprecation")
 	@Kroll.method
 	public String formatTelephoneNumber(String telephoneNumber)

@@ -25,6 +25,7 @@ extern NSString *const TI_APPLICATION_GUID;
 - (void)dealloc
 {
   RELEASE_TO_NIL(httpRequest);
+  RELEASE_TO_NIL(requestHeaders);
   RELEASE_TO_NIL(apsConnectionManager);
   RELEASE_TO_NIL(apsConnectionDelegate);
   [super dealloc];
@@ -77,9 +78,20 @@ extern NSString *const TI_APPLICATION_GUID;
     }
   }
 
+  // Initialize request headers dictionary
+  RELEASE_TO_NIL(requestHeaders);
+  requestHeaders = [[NSMutableDictionary alloc] init];
+
   NSString *method = [TiUtils stringValue:[args objectAtIndex:0]];
   NSURL *url = [TiUtils toURL:[args objectAtIndex:1] proxy:self];
   [self ensureClient];
+
+  // Store User-Agent header that is set by default
+  NSString *userAgent = [[TiApp app] userAgent];
+  if (userAgent != nil) {
+    [requestHeaders setObject:userAgent forKey:@"User-Agent"];
+  }
+
   [httpRequest setMethod:method];
   [httpRequest setUrl:url];
 
@@ -453,10 +465,28 @@ extern NSString *const TI_APPLICATION_GUID;
     return;
   }
   NSString *key = [TiUtils stringValue:[args objectAtIndex:0]];
-  NSString *value = [TiUtils stringValue:[args objectAtIndex:1]];
+  id valueArg = [args objectAtIndex:1];
+
+  // Check if value is null or NSNull - if so, remove the header (matches Android behavior)
+  if (valueArg == nil || valueArg == [NSNull null]) {
+    // Remove header from requestHeaders dictionary
+    if (requestHeaders != nil) {
+      [requestHeaders removeObjectForKey:key];
+    }
+    // Note: APSHTTPRequest doesn't have a remove method, so we can't remove it from the actual request
+    // The header will be ignored if it's not in requestHeaders when send() is called
+    return;
+  }
+
+  NSString *value = [TiUtils stringValue:valueArg];
 
   if ([key isEqualToString:@"User-Agent"] && ![[[TiApp app] userAgent] isEqualToString:[[TiApp app] systemUserAgent]]) {
     NSLog(@"[WARN] You already specified a custom 'User-Agent' using Ti.userAgent. The user-agents will be concatenated.");
+  }
+
+  // Store the request header
+  if (requestHeaders != nil) {
+    [requestHeaders setObject:value forKey:key];
   }
 
   [httpRequest addRequestHeader:key value:value];
@@ -475,6 +505,23 @@ extern NSString *const TI_APPLICATION_GUID;
   NSMutableArray *array = [NSMutableArray array];
   for (NSString *key in headers) {
     [array addObject:[NSString stringWithFormat:@"%@:%@", key, [headers objectForKey:key]]];
+  }
+  return [array componentsJoinedByString:@"\n"];
+}
+
+- (NSString *)getAllRequestHeaders:(id)unused
+{
+  return [self allRequestHeaders];
+}
+
+- (NSString *)allRequestHeaders
+{
+  if (requestHeaders == nil) {
+    return @"";
+  }
+  NSMutableArray *array = [NSMutableArray array];
+  for (NSString *key in requestHeaders) {
+    [array addObject:[NSString stringWithFormat:@"%@:%@", key, [requestHeaders objectForKey:key]]];
   }
   return [array componentsJoinedByString:@"\n"];
 }

@@ -245,7 +245,12 @@ public class TiUrl
 			if (!path.startsWith(PATH_SEPARATOR)) {
 				result = baseUrl + path;
 			} else {
-				result = scheme + PATH_SEPARATOR + path;
+				// Absolute paths: treat known filesystem roots as file://, otherwise as app:/ resource
+				if (isAbsoluteFilesystemRoot(path)) {
+					result = "file://" + path;
+				} else {
+					result = scheme + PATH_SEPARATOR + path;
+				}
 			}
 		} else {
 			result = path;
@@ -257,6 +262,14 @@ public class TiUrl
 			result = tbf.nativePath();
 		}
 		return result;
+	}
+
+	private static boolean isAbsoluteFilesystemRoot(String path)
+	{
+		return path.startsWith("/storage/")
+			|| path.startsWith("/sdcard/")
+			|| path.startsWith("/mnt/")
+			|| path.startsWith("/data/");
 	}
 
 	public static String absoluteUrl(String defaultScheme, String url, String baseUrl)

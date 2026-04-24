@@ -21,5 +21,6 @@
 
 @interface TiUIListViewProxy (internal)
 - (void)willDisplayCell:(NSIndexPath *)indexPath;
+- (BOOL)isSectionHeaderInSectionWithIndexVisible:(id)index;
 @end
 #endif

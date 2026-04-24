@@ -13,7 +13,6 @@ import org.appcelerator.kroll.KrollProxy;
 import org.appcelerator.kroll.annotations.Kroll;
 import org.appcelerator.kroll.common.Log;
 import org.appcelerator.titanium.TiC;
-import org.appcelerator.titanium.TiDimension;
 import org.appcelerator.titanium.util.TiColorHelper;
 import org.appcelerator.titanium.util.TiConvert;
 
@@ -25,6 +24,7 @@ import ti.modules.titanium.ui.widget.TiSwipeRefreshLayout;
 	propertyAccessors = {
 		TiC.PROPERTY_TINT_COLOR,
 		TiC.PROPERTY_TITLE,
+		TiC.PROPERTY_REFRESH_CONTROL_OFFSET
 	})
 public class RefreshControlProxy extends KrollProxy
 {
@@ -143,12 +143,13 @@ public class RefreshControlProxy extends KrollProxy
 				onTintColorChanged(value);
 			}
 		}
-		if (properties.containsKeyAndNotNull("offset")) {
-			KrollDict offset = properties.getKrollDict("offset");
-			offsetStart = new TiDimension(TiConvert.toInt(offset.get("start"), 0), TiDimension.TYPE_TOP)
-				.getAsPixels(this.swipeRefreshLayout);
-			offsetEnd = new TiDimension(TiConvert.toInt(offset.get("end"), 80), TiDimension.TYPE_BOTTOM)
-				.getAsPixels(this.swipeRefreshLayout);
+
+		// Fetch "offset" property, if provided.
+		if (properties.containsKeyAndNotNull(TiC.PROPERTY_REFRESH_CONTROL_OFFSET)) {
+			value = properties.get(TiC.PROPERTY_REFRESH_CONTROL_OFFSET);
+			if (value != null) {
+				onOffsetChanged(value);
+			}
 		}
 	}
 
@@ -173,6 +174,8 @@ public class RefreshControlProxy extends KrollProxy
 		// Handle property change.
 		if (name.equals(TiC.PROPERTY_TINT_COLOR)) {
 			onTintColorChanged(value);
+		} else if (name.equals(TiC.PROPERTY_REFRESH_CONTROL_OFFSET)) {
+			onOffsetChanged(value);
 		}
 	}
 
@@ -201,6 +204,66 @@ public class RefreshControlProxy extends KrollProxy
 
 		// Apply the color to the refresh progress indicator.
 		this.swipeRefreshLayout.setColorSchemeColors(tintColor);
+	}
+
+	/**
+	 * Processes offset property changes and applies them to the SwipeRefreshLayout.
+	 *
+	 * @param offsetValue The offset value to be applied. Expected to be a KrollDict with "start" and "end" properties.
+	 */
+	private void onOffsetChanged(Object offsetValue)
+	{
+		// Validate offset value - accept KrollDict, HashMap, or other Map types
+		if (offsetValue == null) {
+			Log.e(TAG, "Property '" + TiC.PROPERTY_REFRESH_CONTROL_OFFSET + "' cannot be null.");
+			return;
+		}
+
+		// Convert to KrollDict if needed
+		KrollDict offset;
+		if (offsetValue instanceof KrollDict) {
+			offset = (KrollDict) offsetValue;
+		} else if (offsetValue instanceof java.util.Map) {
+			// Convert HashMap or other Map types to KrollDict
+			offset = new KrollDict((java.util.Map<String, Object>) offsetValue);
+		} else {
+			String errorMsg = "Property '" + TiC.PROPERTY_REFRESH_CONTROL_OFFSET
+				+ "' must have 'start' and 'end'. Received: " + offsetValue.getClass().getSimpleName();
+			Log.e(TAG, errorMsg);
+			return;
+		}
+
+		// Validate that required keys exist
+		if (!offset.containsKey("start") || !offset.containsKey("end")) {
+			String errorMsg = "Property '" + TiC.PROPERTY_REFRESH_CONTROL_OFFSET
+				+ "' must contain both 'start' and 'end' properties.";
+			Log.e(TAG, errorMsg);
+			return;
+		}
+
+		// Get density factor for manual conversion from dp to pixels
+		float density;
+		if (this.swipeRefreshLayout != null) {
+			density = this.swipeRefreshLayout.getResources().getDisplayMetrics().density;
+		} else {
+			density = getActivity().getResources().getDisplayMetrics().density;
+		}
+
+		// Calculate new offset values - convert dp to pixels manually
+		// The values from JavaScript are expected to be in dp (density-independent pixels)
+		int startDp = TiConvert.toInt(offset.get("start"), 0);
+		int endDp = TiConvert.toInt(offset.get("end"), 80);
+		
+		int newOffsetStart = (int) (startDp * density);
+		int newOffsetEnd = (int) (endDp * density);
+
+		// Update static offset values
+		offsetStart = newOffsetStart;
+		offsetEnd = newOffsetEnd;
+
+		if (this.swipeRefreshLayout != null) {
+			this.swipeRefreshLayout.setProgressViewOffset(false, offsetStart, offsetEnd);
+		}
 	}
 
 	/**
@@ -287,9 +350,20 @@ public class RefreshControlProxy extends KrollProxy
 
 		// Set up the given view for pull-down refresh support.
 		view.setColorSchemeColors(this.tintColor);
+		
+		// Apply offset if it has been set, or recompute it from properties
 		if (offsetStart != -1 && offsetEnd != -1) {
+			Log.d(TAG, "Applying existing offset to new view - start: " + offsetStart + "px, end: " + offsetEnd + "px");
 			view.setProgressViewOffset(false, offsetStart, offsetEnd);
+		} else {
+			// Check if we have offset property values to recompute
+			Object offsetProperty = getProperty(TiC.PROPERTY_REFRESH_CONTROL_OFFSET);
+			if (offsetProperty != null) {
+				Log.d(TAG, "Recomputing offset for new view assignment");
+				onOffsetChanged(offsetProperty);
+			}
 		}
+		
 		view.setSwipeRefreshEnabled(true);
 		view.setOnRefreshListener(new TiSwipeRefreshLayout.OnRefreshListener()
 		{

@@ -15,8 +15,6 @@
 
 - (NSString *)getLink:(NSUInteger)arg;
 
-+ (TiUIAttributedStringProxy *)fromProperties:(id)arg;
-
 typedef enum {
   AttributeNameFont,
   AttributeNameParagraphStyle,

@@ -437,6 +437,13 @@ public class UIModule extends KrollModule implements TiApplication.Configuration
 	public static final int HIDDEN_BEHAVIOR_INVISIBLE = View.INVISIBLE;
 
 	@Kroll.constant
+	public static final int CLIP_MODE_DEFAULT  = 0;
+	@Kroll.constant
+	public static final int CLIP_MODE_ENABLED  = 1;
+	@Kroll.constant
+	public static final int CLIP_MODE_DISABLED = -1;
+
+	@Kroll.constant
 	public static final int USER_INTERFACE_STYLE_LIGHT = Configuration.UI_MODE_NIGHT_NO;
 	@Kroll.constant
 	public static final int USER_INTERFACE_STYLE_DARK = Configuration.UI_MODE_NIGHT_YES;
@@ -604,7 +611,7 @@ public class UIModule extends KrollModule implements TiApplication.Configuration
 			return;
 		}
 
-		// Change the night mode.
+		// Change the night mode with a guard: ensure decorView is available to avoid Android 12+ splash races.
 		AppCompatDelegate.setDefaultNightMode(nightModeId);
 
 		// Fire a "userinterfacestyle" change event.
@@ -614,7 +621,22 @@ public class UIModule extends KrollModule implements TiApplication.Configuration
 		// Note: Works-around a Google bug where it doesn't always call the activity's onNightModeChanged() method.
 		Activity activity = TiApplication.getAppCurrentActivity();
 		if (activity instanceof TiBaseActivity) {
-			((TiBaseActivity) activity).applyNightMode();
+			final TiBaseActivity base = (TiBaseActivity) activity;
+			final Window w = base.getWindow();
+			if (w != null && w.peekDecorView() != null) {
+				base.applyNightMode();
+			} else {
+				new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
+					@Override
+					public void run()
+					{
+						Window w2 = base.getWindow();
+						if (w2 != null && w2.peekDecorView() != null) {
+							base.applyNightMode();
+						}
+					}
+				});
+			}
 		}
 	}
 

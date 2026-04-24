@@ -147,9 +147,8 @@ bool JavaObject::isDetached()
 
 bool JavaObject::isWeak()
 {
-    if (!isWeakRef_ && (refTableKey_ > 0 && !ReferenceTable::isStrongReference(refTableKey_))) {
-        isWeakRef_ = true;
-    }
+    // Only rely on our cached state to avoid expensive JNI calls from hot paths (property getters)
+    // The isWeakRef_ flag is set explicitly in MakeJavaWeak() and cleared in MakeJavaStrong()
     return isWeakRef_;
 }
 

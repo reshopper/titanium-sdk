@@ -78,7 +78,19 @@ public class TiUIImageView extends TiUIView implements OnLifecycleEvent, Handler
 		super(proxy);
 		imageViewProxy = (ImageViewProxy) proxy;
 
-		Log.d(TAG, "Creating an ImageView", Log.DEBUG_MODE);
+		// Extra debug logging to help trace where ImageView is created
+		String creationUrl = null;
+		try {
+			if (proxy != null && proxy.getCreationUrl() != null) {
+				creationUrl = proxy.getCreationUrl().getNormalizedUrl();
+			}
+		} catch (Throwable t) {
+			// ignore
+		}
+		Log.d(TAG, "Creating an ImageView | creationUrl="
+			+ (creationUrl != null ? creationUrl : "<null>")
+			+ ", proxyClass=" + proxy.getClass().getSimpleName()
+			+ ", thread=" + Thread.currentThread().getName(), Log.DEBUG_MODE);
 
 		view = new TiImageView(proxy.getActivity(), proxy);
 

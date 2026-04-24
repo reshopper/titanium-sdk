@@ -26,7 +26,6 @@ import ti.modules.titanium.ui.widget.TiUIScrollView;
 		TiC.PROPERTY_SHOW_HORIZONTAL_SCROLL_INDICATOR,
 		TiC.PROPERTY_SHOW_VERTICAL_SCROLL_INDICATOR,
 		TiC.PROPERTY_SCROLL_TYPE,
-		TiC.PROPERTY_CONTENT_OFFSET,
 		TiC.PROPERTY_CAN_CANCEL_EVENTS,
 		TiC.PROPERTY_OVER_SCROLL_MODE,
 		TiC.PROPERTY_REFRESH_CONTROL
@@ -57,14 +56,42 @@ public class ScrollViewProxy extends TiViewProxy
 		return (TiUIScrollView) getOrCreateView();
 	}
 
+	@Kroll.getProperty
+	public KrollDict getContentOffset()
+	{
+		Object value = getProperty(TiC.PROPERTY_CONTENT_OFFSET);
+		if (value instanceof KrollDict) {
+			return (KrollDict) value;
+		}
+		KrollDict offset = new KrollDict();
+		offset.put(TiC.EVENT_PROPERTY_X, 0);
+		offset.put(TiC.EVENT_PROPERTY_Y, 0);
+		return offset;
+	}
+
+	@Kroll.setProperty
+	public void setContentOffset(Object value)
+	{
+		getScrollView().setContentOffset(value);
+		setProperty(TiC.PROPERTY_CONTENT_OFFSET, value);
+	}
+
 	@Kroll.method
 	public void scrollTo(int x, int y, @Kroll.argument(optional = true) HashMap args)
 	{
 		boolean animated = false;
+		int duration = -1;
+		Integer curve = null;
 		if (args != null) {
 			animated = TiConvert.toBoolean(args.get("animated"), false);
+			if (args.containsKey("duration")) {
+				duration = TiConvert.toInt(args.get("duration"), -1);
+			}
+			if (args.containsKey(TiC.PROPERTY_CURVE)) {
+				curve = TiConvert.toInt(args, TiC.PROPERTY_CURVE);
+			}
 		}
-		handleScrollTo(x, y, animated);
+		handleScrollTo(x, y, animated, duration, curve);
 	}
 
 	@Kroll.getProperty
@@ -99,9 +126,85 @@ public class ScrollViewProxy extends TiViewProxy
 		handleScrollToTop(animated);
 	}
 
+	@Kroll.method
+	public void setContentOffsetWithAnimation(Object offset, @Kroll.argument(optional = true) HashMap args)
+	{
+		boolean animated = false;
+		if (args != null) {
+			animated = TiConvert.toBoolean(args.get("animated"), false);
+		}
+		handleSetContentOffsetAnimated(offset, animated);
+	}
+
+	@Kroll.method
+	public void setContentOffset(Object[] args)
+	{
+		if (args == null || args.length == 0) {
+			return;
+		}
+		
+		Object offset = args[0];
+		boolean animated = false;
+		
+		if (args.length > 1 && args[1] instanceof HashMap) {
+			HashMap options = (HashMap) args[1];
+			animated = TiConvert.toBoolean(options.get("animated"), false);
+		}
+		
+		handleSetContentOffsetAnimated(offset, animated);
+	}
+
+	@Kroll.setProperty
+	public void setContentInsets(Object insets)
+	{
+		if (insets == null) {
+			return;
+		}
+		
+		// Store as property for consistency
+		setProperty(TiC.PROPERTY_CONTENT_INSETS, insets);
+		
+		// Call the existing implementation in TiUIScrollView
+		getScrollView().setContentInsets(insets);
+	}
+
+	@Kroll.method
+	public void setContentInsets(Object[] args)
+	{
+		if (args == null || args.length == 0) {
+			return;
+		}
+		
+		Object insets = args[0];
+		// Optional animated parameter for future compatibility (currently not used on Android)
+		// HashMap options = args.length > 1 && args[1] instanceof HashMap ? (HashMap) args[1] : null;
+		
+		// Store as property for consistency
+		setProperty(TiC.PROPERTY_CONTENT_INSETS, insets);
+		
+		getScrollView().setContentInsets(insets);
+	}
+
+	@Kroll.getProperty
+	public Object getContentInsets()
+	{
+		return getScrollView().getContentInsets();
+	}
+
 	public void handleScrollTo(int x, int y, boolean smoothScroll)
 	{
+		// Backwards compatibility: no duration specified
 		getScrollView().scrollTo(x, y, smoothScroll);
+	}
+
+	public void handleScrollTo(int x, int y, boolean smoothScroll, int duration)
+	{
+		getScrollView().scrollTo(x, y, smoothScroll, duration);
+	}
+
+	public void handleScrollTo(int x, int y, boolean smoothScroll, int duration, Integer curve)
+	{
+		getScrollView().scrollTo(x, y, smoothScroll, duration, curve);
 	}
 
 	public void handleScrollToBottom(boolean animated)
@@ -112,6 +215,26 @@ public class ScrollViewProxy extends TiViewProxy
 	public void handleScrollToTop(boolean animated)
 	{
 		getScrollView().scrollToTop(animated);
+	}
+
+	public void handleSetContentOffsetAnimated(Object offset, boolean animated)
+	{
+		TiUIScrollView scrollView = getScrollView();
+		scrollView.setContentOffset(offset);
+		
+		if (offset instanceof HashMap) {
+			KrollDict offsetDict = new KrollDict((HashMap) offset);
+			int x = 0, y = 0;
+			
+			if (offsetDict.containsKeyAndNotNull(TiC.PROPERTY_X)) {
+				x = TiConvert.toInt(offsetDict.get(TiC.PROPERTY_X), 0);
+			}
+			if (offsetDict.containsKeyAndNotNull(TiC.PROPERTY_Y)) {
+				y = TiConvert.toInt(offsetDict.get(TiC.PROPERTY_Y), 0);
+			}
+			
+			scrollView.scrollTo(x, y, animated);
+		}
 	}
 
 	@Override

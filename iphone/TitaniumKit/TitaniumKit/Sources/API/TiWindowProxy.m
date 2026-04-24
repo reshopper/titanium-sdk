@@ -28,6 +28,11 @@
   if (controller != nil) {
     TiThreadPerformOnMainThread(
         ^{
+          // _proxy is an assign (non-retained) ivar in TiViewController.
+          // UIKit may fire deferred viewDidDisappear: callbacks via
+          // _UIAfterCACommitBlock after the proxy has been freed. Nil it
+          // out here so those callbacks become no-ops instead of crashes.
+          [controller releaseProxy];
           RELEASE_TO_NIL(controller);
         },
         YES);
@@ -156,6 +161,9 @@
 
 - (void)windowWillClose
 {
+  if ([self _hasListeners:@"willClose"]) {
+    [self fireEvent:@"willClose" withObject:nil withSource:self propagate:NO reportSuccess:NO errorCode:0 message:nil];
+  }
   if (tab == nil && !self.isManaged) {
     [[[[TiApp app] controller] topContainerController] willCloseWindow:self];
   }

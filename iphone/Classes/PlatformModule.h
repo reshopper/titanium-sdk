@@ -62,6 +62,13 @@ JSExportAs(openURL,
            : (JSValue *)options andCallback
            : (JSValue *)callback);
 
+// Debug lifecycle tracking methods
+- (NSNumber *)getLifecycleProxyCount:(id)args;
+- (NSNumber *)getLifecycleViewCount:(id)args;
+- (void)printLifecycleStats:(id)args;
+- (void)resetLifecycleStats:(id)args;
+- (NSString *)getViewProxyId:(id)view;
+
 @end
 
 @interface PlatformModule : ObjcModule <TiPlatformExports> {
