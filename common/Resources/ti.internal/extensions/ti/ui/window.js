@@ -16,7 +16,9 @@ if (OS_ANDROID) {
 
 	function createWindow(options) {
 		const window = new Window(options);
-		window._children = [];
+		// Sync from native children (handles 'children' property in creation dict)
+		const nativeChildren = window.children;
+		window._children = nativeChildren ? Array.from(nativeChildren) : [];
 		return window;
 	}
 

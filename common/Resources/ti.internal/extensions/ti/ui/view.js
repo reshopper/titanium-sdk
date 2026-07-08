@@ -9,13 +9,22 @@
 if (OS_ANDROID) {
 	const View = Titanium.UI.View;
 
+	// Lazily initialize _children from native children (handles children added
+	// during creation via the 'children' property in the creation dict).
+	function ensureChildrenRetained(proxy) {
+		if (!proxy._children) {
+			const nativeChildren = proxy.children;
+			proxy._children = nativeChildren ? Array.from(nativeChildren) : [];
+		}
+	}
+
 	const _add = View.prototype.add;
 	View.prototype.add = function (child) {
 
 		if (child instanceof Titanium.TiWindow) {
 			throw new Error('Cannot add window/tabGroup to a view.');
 		}
-		this._children = this._children || [];
+		ensureChildrenRetained(this);
 		_add.call(this, child);
 		// The children have to be retained by the view in the Javascript side
 		// in order to let V8 know the relationship between children and the view.
@@ -30,10 +39,10 @@ if (OS_ANDROID) {
 		_remove.call(this, child);
 
 		// Remove the child in the Javascript side so it can be detached and garbage collected.
-		const children = this._children || [];
-		const childIndex = children.indexOf(child);
+		ensureChildrenRetained(this);
+		const childIndex = this._children.indexOf(child);
 		if (childIndex !== -1) {
-			children.splice(childIndex, 1);
+			this._children.splice(childIndex, 1);
 		}
 	};
 

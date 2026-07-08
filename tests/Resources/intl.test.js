@@ -13,6 +13,16 @@ const should = require('./utilities/assertions');
 describe('Intl', () => {
 	it('exists', () => should(Intl).not.be.undefined());
 
+	it('has DisplayNames constructor', () => {
+		should(Intl.DisplayNames).not.be.undefined();
+		should(Intl.DisplayNames).be.a.Function();
+	});
+
+	it('has RelativeTimeFormat constructor', () => {
+		should(Intl.RelativeTimeFormat).not.be.undefined();
+		should(Intl.RelativeTimeFormat).be.a.Function();
+	});
+
 	describe('#getCanonicalLocales()', () => {
 		it('is a Function', () => {
 			should(Intl.getCanonicalLocales).not.be.undefined();

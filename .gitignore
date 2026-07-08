@@ -61,3 +61,8 @@ junit_report.xml
 
 # VS Code History Extension
 .history
+.cursor/rules/*
+.cursor/plans/*
+.github/workflows/sponsors.yaml
+
+/scripts/release.sh

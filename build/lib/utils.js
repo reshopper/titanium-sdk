@@ -86,7 +86,7 @@ export async function copyAndModifyFiles(srcFolder, destFolder, files, substitut
  * @param {boolean} [options.progress=true] show progress bar/spinner
  * @returns {Promise<string>}
  */
-function download(url, destination, options = { progress: true }) {
+function download(url, destination, options = { progress: true }, _retries = 3) {
 	return new Promise((resolve, reject) => {
 		console.log('Downloading %s', url);
 
@@ -103,7 +103,18 @@ function download(url, destination, options = { progress: true }) {
 		});
 
 		req.on('response', function (req) {
-			if (req.statusCode >= 400) {
+			if (req.statusCode >= 500 && _retries > 0) {
+				// Transient server error, retry after a delay
+				tempStream.end();
+				fs.existsSync(destination) && fs.unlinkSync(destination);
+				const delay = (4 - _retries) * 5000; // 5s, 10s, 15s
+				console.warn('Request for %s failed with HTTP %s %s. Retrying in %ds... (%d retries left)',
+					url, req.statusCode, req.statusMessage, delay / 1000, _retries);
+				setTimeout(() => {
+					download(url, destination, options, _retries - 1).then(resolve, reject);
+				}, delay);
+				return;
+			} else if (req.statusCode >= 400) {
 				// something went wrong, abort
 				console.log();
 				const err = util.format('Request for %s failed with HTTP status code %s %s', url, req.statusCode, req.statusMessage);

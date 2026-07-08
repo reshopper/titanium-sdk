@@ -2171,6 +2171,41 @@ properties:
     platforms: [iphone, ipad, macos]
     since: "5.5.0"
 
+  - name: CLIP_MODE_DEFAULT
+    summary: Use the default clipping behavior for the view. The default clipping behavior is dependent on the type of view.
+    description: |
+        For most views, the default behavior is to not clip child views. However some views such as
+        <Titanium.UI.ScrollView> have clipping enabled by default.
+
+        This is the default value for the <Titanium.UI.View.clipMode> property.
+    type: Number
+    permission: read-only
+    platforms: [android, iphone, ipad, macos]
+    since: {android: "12.7.0", iphone: "3.3.0", ipad: "3.3.0"}
+
+  - name: CLIP_MODE_DISABLED
+    summary: Disables clipping of child views.
+    description: |
+        When this clipping mode is used, child views are allowed to be drawn outside
+        the bounds of the parent view.
+
+        Use with the <Titanium.UI.View.clipMode> property.
+    type: Number
+    permission: read-only
+    platforms: [android, iphone, ipad, macos]
+    since: {android: "12.7.0", iphone: "3.3.0", ipad: "3.3.0"}
+
+  - name: CLIP_MODE_ENABLED
+    summary: Enables clipping of child views.
+    description: |
+        When this clipping mode is used, all child views are clipped to the bounds of the parent view.
+
+        Use with the <Titanium.UI.View.clipMode> property.
+    type: Number
+    permission: read-only
+    platforms: [android, iphone, ipad, macos]
+    since: {android: "12.7.0", iphone: "3.3.0", ipad: "3.3.0"}
+
   - name: PICKER_TYPE_COUNT_DOWN_TIMER
     summary: Use a picker with a countdown timer appearance, showing hours and minutes.
     description: |

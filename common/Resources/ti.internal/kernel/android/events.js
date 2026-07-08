@@ -183,6 +183,14 @@ export default function EventEmitterBootstrap(global, kroll) {
 		enumerable: false
 	});
 
+	// The JavaObject prototype will provide a version of this
+	// that delegates back to the Java proxy. Non-Java versions
+	// of EventEmitter don't care, so this no op is called instead.
+	Object.defineProperty(EventEmitter.prototype, '_hasListenersForEventType', {
+		value: function () {},
+		enumerable: false
+	});
+
 	Object.defineProperty(EventEmitter.prototype, 'on', {
 		value: EventEmitter.prototype.addListener,
 		enumerable: false

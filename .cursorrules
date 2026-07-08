@@ -1,0 +1,2608 @@
+# Titanium SDK Native Module Development Rules
+
+## Overview
+This file contains comprehensive rules for developing native modules for Titanium SDK, covering Android (Java), iOS (Objective-C), and iOS (Swift) implementations.
+
+## Android (Java) Native Modules
+
+### Properties
+
+#### Using @Kroll.property (Field-based)
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    // ✅ Standard property with get/set access
+    @Kroll.property
+    private String username;
+    
+    // ✅ Read-only property
+    @Kroll.property(get = true, set = false)
+    private String readOnlyValue;
+    
+    // ✅ Property with custom name
+    @Kroll.property(name = "customName")
+    private String internalName;
+}
+```
+
+#### Using @Kroll.getProperty / @Kroll.setProperty (Method-based)
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    // ✅ Property getter - creates "someProperty" in JavaScript
+    @Kroll.getProperty
+    public String getSomeProperty() {
+        return "value";
+    }
+    
+    // ✅ Property setter - creates "someProperty" in JavaScript  
+    @Kroll.setProperty
+    public void setSomeProperty(String value) {
+        // Implementation
+    }
+    
+    // ✅ Property with custom name
+    @Kroll.getProperty(name = "customName")
+    public String getInternalValue() {
+        return "value";
+    }
+    
+    // ✅ Property with retain control
+    @Kroll.setProperty(retain = false)
+    public void setNonRetainedValue(Object value) {
+        // Implementation
+    }
+    
+    // ✅ UI thread execution
+    @Kroll.getProperty(runOnUiThread = true)
+    public String getUiValue() {
+        return "ui-value";
+    }
+}
+```
+
+### Methods
+
+#### Standard Methods
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    // ✅ Simple method
+    @Kroll.method
+    public String doSomething() {
+        return "result";
+    }
+    
+    // ✅ Method with parameters
+    @Kroll.method
+    public void processData(String data, @Kroll.argument(optional = true) Boolean flag) {
+        // Implementation
+    }
+    
+    // ✅ Method with custom name
+    @Kroll.method(name = "customMethodName")
+    public void internalMethod() {
+        // Implementation
+    }
+    
+    // ✅ Method with KrollInvocation for context
+    @Kroll.method
+    public void contextAwareMethod(KrollInvocation invocation, String data) {
+        // Implementation
+    }
+}
+```
+
+#### Parameter Annotations
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    @Kroll.method
+    public void complexMethod(
+        @Kroll.argument(name = "customName") String param1,
+        @Kroll.argument(optional = true) Integer param2,
+        @Kroll.argument(converter = "org.example.CustomConverter") Object param3
+    ) {
+        // Implementation
+    }
+}
+```
+
+### ❌ AVOID: Set/Get methods without annotations
+```java
+// ❌ These will be auto-converted to properties with lowercase names
+public String getValue() { return ""; }  // becomes "value" property
+public void setValue(String v) { }       // becomes "value" property
+
+// ✅ Use @Kroll.method instead if you want them as methods
+@Kroll.method
+public String retrieveValue() { return ""; }  // stays as method
+
+@Kroll.method 
+public void configureValue(String v) { }      // stays as method
+```
+
+## iOS (Objective-C) Native Modules
+
+### Properties
+```objc
+@interface MyProxy : TiProxy
+
+// ✅ Standard properties (automatically exposed)
+@property (nonatomic, strong) NSString *username;
+@property (nonatomic, readonly) NSString *readOnlyValue;
+
+// ✅ Computed properties with custom logic
+- (NSString *)computedValue;
+- (void)setComputedValue:(NSString *)value;
+
+@end
+
+@implementation MyProxy
+
+// ✅ Property getter implementation
+- (NSString *)computedValue {
+    return @"computed";
+}
+
+// ✅ Property setter implementation  
+- (void)setComputedValue:(NSString *)value {
+    [self replaceValue:value forKey:@"computedValue" notification:YES];
+}
+
+@end
+```
+
+### Methods
+```objc
+@interface MyProxy : TiProxy
+
+// ✅ Method declarations
+- (void)doSomething:(id)args;
+- (NSString *)processData:(id)args;
+
+@end
+
+@implementation MyProxy
+
+// ✅ Simple method
+- (void)doSomething:(id)args {
+    // Implementation
+}
+
+// ✅ Method with parameter validation
+- (NSString *)processData:(id)args {
+    ENSURE_SINGLE_ARG(args, NSString);
+    NSString *input = (NSString *)args;
+    return [@"processed: " stringByAppendingString:input];
+}
+
+// ✅ Method with multiple arguments
+- (void)complexMethod:(id)args {
+    ENSURE_TYPE(args, NSArray);
+    NSString *param1 = [args objectAtIndex:0];
+    NSNumber *param2 = [args count] > 1 ? [args objectAtIndex:1] : nil;
+    // Implementation
+}
+
+@end
+```
+
+### ❌ AVOID: Automatic set/get conversion
+```objc
+// ❌ These will be auto-converted to properties
+- (NSString *)getValue;     // becomes "value" property  
+- (void)setValue:(id)value; // becomes "value" property
+
+// ✅ Use different naming if you want methods
+- (NSString *)retrieveValue;
+- (void)configureValue:(id)value;
+```
+
+## iOS (Swift) Native Modules
+
+### Properties
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    // ✅ Computed properties (recommended)
+    @objc public var someValue: String {
+        get { 
+            return "Hello World"
+        }
+        set {
+            self.replaceValue(newValue, forKey: "someValue", notification: false)
+        }
+    }
+    
+    // ✅ Read-only computed property
+    @objc public var readOnlyValue: String {
+        return "This is readonly"
+    }
+    
+    // ✅ Stored property
+    @objc public var storedValue: String = "default"
+}
+```
+
+### Methods
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    // ✅ Method with explicit selector (stays as method)
+    @objc(processData:)
+    func processData(arguments: Array<Any>?) -> String? {
+        guard let arguments = arguments,
+              let data = arguments.first as? String else { return nil }
+        return "processed: \(data)"
+    }
+    
+    // ✅ Method without parameters
+    @objc(doSomething:)
+    func doSomething(arguments: Array<Any>?) -> Void {
+        // Implementation
+    }
+    
+    // ✅ Method returning complex data
+    @objc(getComplexData:)
+    func getComplexData(arguments: Array<Any>?) -> [String: Any]? {
+        return [
+            "status": "success",
+            "data": ["key": "value"]
+        ]
+    }
+}
+```
+
+### ❌ AVOID: Swift method naming that looks like properties
+```swift
+// ❌ These might be confused with properties
+func getValue() -> String { return "" }
+func setValue(_ value: String) { }
+
+// ✅ Use computed properties instead
+@objc public var value: String {
+    get { return "" }
+    set { /* implementation */ }
+}
+
+// ✅ Or use explicit method selectors
+@objc(retrieveValue:)
+func retrieveValue(arguments: Array<Any>?) -> String? { return "" }
+```
+
+## Promise/Async Patterns
+
+### Android (Java) Promises
+
+#### Immediate Promise Resolution
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    // ✅ Simple promise method
+    @Kroll.method
+    public KrollPromise<String> asyncOperation() {
+        return KrollPromise.create((promise) -> {
+            // Perform async work
+            try {
+                String result = performWork();
+                promise.resolve(result);
+            } catch (Exception e) {
+                promise.reject(e);
+            }
+        });
+    }
+    
+    // ✅ Promise with parameters
+    @Kroll.method
+    public KrollPromise<KrollDict> processDataAsync(String data, 
+                                                   @Kroll.argument(optional = true) KrollFunction callback) {
+        return KrollPromise.create((promise) -> {
+            new Thread(() -> {
+                KrollDict result = new KrollDict();
+                try {
+                    // Process data
+                    result.put("processed", data.toUpperCase());
+                    result.putCodeAndMessage(0, "Success");
+                    
+                    // Call callback if provided
+                    if (callback != null) {
+                        callback.callAsync(getKrollObject(), result);
+                    }
+                    promise.resolve(result);
+                } catch (Exception e) {
+                    result.putCodeAndMessage(-1, e.getMessage());
+                    promise.reject(result);
+                }
+            }).start();
+        });
+    }
+}
+```
+
+#### Stored Promise for Later Resolution
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    protected KrollPromise<Void> storedPromise;
+    
+    @Kroll.method
+    public KrollPromise<Void> longRunningOperation() {
+        storedPromise = KrollPromise.create((promise) -> {
+            // Start async operation that will complete later
+            startAsyncWork();
+        });
+        return storedPromise;
+    }
+    
+    // Called when operation completes
+    private void onOperationComplete(boolean success) {
+        if (storedPromise != null) {
+            if (success) {
+                storedPromise.resolve(null);
+            } else {
+                storedPromise.reject(new Throwable("Operation failed"));
+            }
+            storedPromise = null;
+        }
+    }
+}
+```
+
+### iOS (Objective-C) Promises
+
+#### Basic Promise Usage
+```objc
+@interface MyProxy : TiProxy
+- (JSValue *)asyncOperation:(id)args;
+- (JSValue *)processDataAsync:(id)args;
+@end
+
+@implementation MyProxy
+
+// ✅ Simple async method returning promise
+- (JSValue *)asyncOperation:(id)args {
+    JSContext *context = [self currentContext];
+    KrollPromise *promise = [[[KrollPromise alloc] initInContext:context] autorelease];
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        // Perform work on background thread
+        NSString *result = [self performWork];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [promise resolve:@[result]];
+        });
+    });
+    
+    return promise.JSValue;
+}
+
+// ✅ Promise with callback support
+- (JSValue *)processDataAsync:(id)args {
+    ENSURE_TYPE(args, NSArray);
+    NSString *data = [args objectAtIndex:0];
+    JSValue *callback = [args count] > 1 ? [args objectAtIndex:1] : nil;
+    
+    JSContext *context = [self currentContext];
+    KrollPromise *promise = [[[KrollPromise alloc] initInContext:context] autorelease];
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        @try {
+            NSDictionary *result = @{
+                @"processed": [data uppercaseString],
+                @"success": @YES
+            };
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (callback && ![callback isUndefined]) {
+                    [callback callWithArguments:@[[JSValue valueWithUndefinedInContext:context], result]];
+                }
+                [promise resolve:@[result]];
+            });
+        } @catch (NSException *ex) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                JSValue *error = [JSValue valueWithNewErrorFromMessage:ex.reason inContext:context];
+                if (callback && ![callback isUndefined]) {
+                    [callback callWithArguments:@[error]];
+                }
+                [promise reject:@[error]];
+            });
+        }
+    });
+    
+    return promise.JSValue;
+}
+
+@end
+```
+
+#### Stored Promise Pattern
+```objc
+@interface MyProxy : TiProxy {
+    KrollPromise *storedPromise;
+}
+- (JSValue *)longRunningOperation:(id)args;
+@end
+
+@implementation MyProxy
+
+- (JSValue *)longRunningOperation:(id)args {
+    JSContext *context = [self currentContext];
+    
+    if (storedPromise != nil) {
+        [storedPromise release];
+    }
+    
+    storedPromise = [[KrollPromise alloc] initInContext:context];
+    
+    // Start async operation
+    [self startAsyncWork];
+    
+    return storedPromise.JSValue;
+}
+
+- (void)onOperationComplete:(BOOL)success withData:(id)data {
+    if (storedPromise != nil) {
+        if (success) {
+            [storedPromise resolve:data ? @[data] : @[]];
+        } else {
+            [storedPromise rejectWithErrorMessage:@"Operation failed"];
+        }
+        [storedPromise release];
+        storedPromise = nil;
+    }
+}
+
+@end
+```
+
+### iOS (Swift) Promises
+
+#### Future Swift Promise Support
+```swift
+// Note: Swift native modules don't have full KrollPromise support yet
+// This is theoretical syntax for future implementation
+
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    // ✅ Theoretical Swift promise method
+    @objc(asyncOperation:)
+    func asyncOperation(arguments: Array<Any>?) -> JSValue? {
+        guard let context = self.currentContext() else { return nil }
+        
+        let promise = KrollPromise(context: context)
+        
+        DispatchQueue.global().async {
+            do {
+                let result = try self.performWork()
+                DispatchQueue.main.async {
+                    promise.resolve([result])
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    promise.reject([error.localizedDescription])
+                }
+            }
+        }
+        
+        return promise.jsValue
+    }
+}
+```
+
+#### Current Swift Workaround (Using Objective-C Bridge)
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    @objc(asyncOperation:)
+    func asyncOperation(arguments: Array<Any>?) -> JSValue? {
+        // Use Objective-C KrollPromise through bridge
+        let objcHelper = MyObjCPromiseHelper()
+        return objcHelper.createPromise(with: self.currentContext()) { promise in
+            DispatchQueue.global().async {
+                // Perform work
+                let result = self.performWork()
+                DispatchQueue.main.async {
+                    promise?.resolve([result])
+                }
+            }
+        }
+    }
+}
+
+// Objective-C helper for promise creation
+@interface MyObjCPromiseHelper : NSObject
+- (JSValue *)createPromiseWithContext:(JSContext *)context 
+                             executor:(void (^)(KrollPromise *))executor;
+@end
+```
+
+## Common Patterns
+
+### Parameter Validation
+```java
+// Android
+@Kroll.method
+public void validateParameters(String required, @Kroll.argument(optional = true) Integer optional) {
+    if (required == null || required.isEmpty()) {
+        throw new IllegalArgumentException("Required parameter is missing");
+    }
+}
+```
+
+```objc
+// Objective-C
+- (void)validateParameters:(id)args {
+    ENSURE_TYPE(args, NSArray);
+    ENSURE_ARG_COUNT(args, 1); // At least 1 argument
+    
+    NSString *required = [args objectAtIndex:0];
+    ENSURE_TYPE(required, NSString);
+    
+    NSNumber *optional = [args count] > 1 ? [args objectAtIndex:1] : nil;
+}
+```
+
+```swift
+// Swift
+@objc(validateParameters:)
+func validateParameters(arguments: Array<Any>?) -> Void {
+    guard let arguments = arguments,
+          let required = arguments.first as? String,
+          !required.isEmpty else {
+        // Handle error
+        return
+    }
+    
+    let optional = arguments.count > 1 ? arguments[1] as? Int : nil
+}
+```
+
+### Threading
+```java
+// Android - UI thread execution
+@Kroll.setProperty(runOnUiThread = true)
+public void setUiProperty(String value) {
+    // Runs on UI thread
+}
+```
+
+```objc
+// iOS - Ensure UI thread
+- (void)setUiProperty:(id)value {
+    ENSURE_UI_THREAD(setUiProperty, value);
+    // Implementation
+}
+```
+
+```swift
+// Swift - UI thread dispatch
+@objc(setUiProperty:)
+func setUiProperty(arguments: Array<Any>?) {
+    DispatchQueue.main.async {
+        // UI thread implementation
+    }
+}
+```
+
+## Promise Best Practices
+
+1. **Always handle errors** - Use try/catch and reject promises on failure
+2. **Support both callback and promise patterns** - Many developers expect callback support alongside promises
+3. **Use appropriate threads** - Perform heavy work on background threads, resolve/reject on main thread
+4. **Validate parameters early** - Check inputs before starting async operations
+5. **Clean up resources** - Set stored promises to nil/null after resolution
+6. **Provide meaningful error messages** - Include context in rejection messages
+7. **Handle edge cases** - Check for null contexts, already completed operations, etc.
+
+## Promise Anti-Patterns
+
+❌ **Don't**: Block the main thread in promise executors
+❌ **Don't**: Forget to handle exceptions in async operations
+❌ **Don't**: Resolve/reject the same promise multiple times
+❌ **Don't**: Create promises on finalized contexts
+❌ **Don't**: Ignore thread safety when accessing shared state
+❌ **Don't**: Return promises from property getters (use methods instead)
+
+## Best Practices
+
+1. **Prefer properties over get/set methods** for simple value access
+2. **Use explicit method annotations** when you need method behavior
+3. **Always validate parameters** in native code
+4. **Handle UI thread requirements** appropriately
+5. **Use meaningful names** that reflect the API purpose
+6. **Document complex parameter structures** in comments
+7. **Handle null/nil values** gracefully
+8. **Follow platform conventions** (camelCase for JavaScript exposure)
+9. **Use promises for async operations** that take time to complete
+10. **Support both callback and promise patterns** for backward compatibility
+
+## Anti-Patterns to Avoid
+
+❌ **Don't**: Use get/set prefixed methods without explicit annotations
+❌ **Don't**: Expose internal implementation details as public API  
+❌ **Don't**: Forget parameter validation
+❌ **Don't**: Block the main thread with long operations
+❌ **Don't**: Use platform-specific types in cross-platform APIs
+❌ **Don't**: Ignore memory management (especially on iOS)
+
+## Property vs Method Decision Matrix
+
+| Use Case | Recommendation | Reason |
+|----------|---------------|---------|
+| Simple value access | Property | More natural JavaScript API |
+| Value with validation | Property with setter | Maintains property semantics |
+| Complex computation | Method | Clear that work is being done |
+| Async operation | Method returning Promise | Properties should be synchronous |
+| Multiple parameters | Method | Properties take single values |
+| Factory pattern | Method | Creating objects is an action |
+| Configuration | Property | Setting state is property-like |
+| Data transformation | Method | Clear input/output relationship |
+
+## Property Access Patterns
+
+### JavaScript Property Access
+```javascript
+// How properties are accessed from JavaScript
+const myProxy = MyModule.createProxy();
+
+// ✅ Property getter access
+const value = myProxy.someProperty;
+const count = myProxy.itemCount;
+
+// ✅ Property setter access  
+myProxy.someProperty = "new value";
+myProxy.itemCount = 42;
+
+// ✅ Property access in event handlers
+myProxy.addEventListener('change', function(e) {
+    Ti.API.info('Property changed: ' + myProxy.someProperty);
+});
+```
+
+### Android Property Implementation Patterns
+
+#### Basic Property Access
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    private String currentValue = "default";
+    private int counter = 0;
+    
+    // ✅ Simple field-based property
+    @Kroll.property
+    private String simpleValue;
+    
+    // ✅ Property with validation and change handling
+    @Kroll.getProperty
+    public String getCurrentValue() {
+        Log.d(TAG, "Getting currentValue: " + currentValue);
+        return currentValue;
+    }
+    
+    @Kroll.setProperty
+    public void setCurrentValue(String value) {
+        if (value == null || value.isEmpty()) {
+            Log.w(TAG, "Invalid value provided, using default");
+            value = "default";
+        }
+        
+        String oldValue = this.currentValue;
+        this.currentValue = value;
+        
+        // ✅ Fire property change event
+        if (!oldValue.equals(value)) {
+            KrollDict event = new KrollDict();
+            event.put("oldValue", oldValue);
+            event.put("newValue", value);
+            event.put("property", "currentValue");
+            fireEvent("propertychange", event);
+        }
+        
+        Log.d(TAG, "Set currentValue: " + value);
+    }
+    
+    // ✅ Read-only computed property
+    @Kroll.getProperty
+    public int getItemCount() {
+        return items != null ? items.size() : 0;
+    }
+    
+    // ✅ Property with background thread handling
+    @Kroll.getProperty(runOnUiThread = true)
+    public String getUiBasedProperty() {
+        // This will always run on UI thread
+        return getCurrentDisplayValue();
+    }
+}
+```
+
+#### Advanced Property Patterns
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    private Map<String, Object> propertyCache = new HashMap<>();
+    private boolean cacheEnabled = true;
+    
+    // ✅ Property with caching
+    @Kroll.getProperty
+    public Object getCachedValue() {
+        if (cacheEnabled && propertyCache.containsKey("cachedValue")) {
+            return propertyCache.get("cachedValue");
+        }
+        
+        Object value = computeExpensiveValue();
+        if (cacheEnabled) {
+            propertyCache.put("cachedValue", value);
+        }
+        return value;
+    }
+    
+    @Kroll.setProperty
+    public void setCachedValue(Object value) {
+        propertyCache.put("cachedValue", value);
+        // Invalidate related cached values
+        propertyCache.remove("derivedValue");
+    }
+    
+    // ✅ Property with async computation
+    @Kroll.getProperty
+    public Object getAsyncProperty() {
+        if (asyncPropertyValue == null) {
+            // Return placeholder while computing
+            computeAsyncProperty();
+            return "Loading...";
+        }
+        return asyncPropertyValue;
+    }
+    
+    private void computeAsyncProperty() {
+        new AsyncTask<Void, Void, Object>() {
+            @Override
+            protected Object doInBackground(Void... params) {
+                return performExpensiveComputation();
+            }
+            
+            @Override
+            protected void onPostExecute(Object result) {
+                asyncPropertyValue = result;
+                // Notify property changed
+                KrollDict event = new KrollDict();
+                event.put("property", "asyncProperty");
+                event.put("value", result);
+                fireEvent("propertyready", event);
+            }
+        }.execute();
+    }
+}
+```
+
+### iOS Property Implementation Patterns (Objective-C)
+
+#### Basic Property Access
+```objc
+@interface MyProxy : TiProxy {
+    NSString *currentValue;
+    NSInteger counter;
+}
+
+@property (nonatomic, strong) NSString *simpleValue;
+@property (nonatomic, readonly) NSInteger itemCount;
+
+@end
+
+@implementation MyProxy
+
+- (id)init {
+    if (self = [super init]) {
+        currentValue = @"default";
+        counter = 0;
+    }
+    return self;
+}
+
+// ✅ Property with validation and change handling
+- (NSString *)currentValue {
+    NSLog(@"[DEBUG] Getting currentValue: %@", currentValue);
+    return currentValue;
+}
+
+- (void)setCurrentValue:(NSString *)value {
+    if (!value || [value length] == 0) {
+        NSLog(@"[WARN] Invalid value provided, using default");
+        value = @"default";
+    }
+    
+    NSString *oldValue = currentValue;
+    currentValue = [value copy];
+    
+    // ✅ Fire property change event
+    if (![oldValue isEqualToString:value]) {
+        NSDictionary *event = @{
+            @"oldValue": oldValue ?: [NSNull null],
+            @"newValue": value,
+            @"property": @"currentValue"
+        };
+        [self fireEvent:@"propertychange" withObject:event];
+    }
+    
+    // ✅ Update backing store for KVC compliance
+    [self replaceValue:value forKey:@"currentValue" notification:YES];
+    
+    NSLog(@"[DEBUG] Set currentValue: %@", value);
+}
+
+// ✅ Read-only computed property
+- (NSNumber *)itemCount {
+    return NUMINT(items ? [items count] : 0);
+}
+
+// ✅ Property with UI thread enforcement
+- (NSString *)uiBasedProperty {
+    ENSURE_UI_THREAD_1_ARG(uiBasedProperty);
+    return [self getCurrentDisplayValue];
+}
+
+@end
+```
+
+#### Advanced Property Patterns
+```objc
+@interface MyProxy : TiProxy {
+    NSMutableDictionary *propertyCache;
+    BOOL cacheEnabled;
+    id asyncPropertyValue;
+}
+@end
+
+@implementation MyProxy
+
+- (id)init {
+    if (self = [super init]) {
+        propertyCache = [[NSMutableDictionary alloc] init];
+        cacheEnabled = YES;
+    }
+    return self;
+}
+
+// ✅ Property with caching
+- (id)cachedValue {
+    if (cacheEnabled && [propertyCache objectForKey:@"cachedValue"]) {
+        return [propertyCache objectForKey:@"cachedValue"];
+    }
+    
+    id value = [self computeExpensiveValue];
+    if (cacheEnabled) {
+        [propertyCache setObject:value forKey:@"cachedValue"];
+    }
+    return value;
+}
+
+- (void)setCachedValue:(id)value {
+    [propertyCache setObject:value forKey:@"cachedValue"];
+    // Invalidate related cached values
+    [propertyCache removeObjectForKey:@"derivedValue"];
+}
+
+// ✅ Property with async computation
+- (id)asyncProperty {
+    if (asyncPropertyValue == nil) {
+        [self computeAsyncProperty];
+        return @"Loading...";
+    }
+    return asyncPropertyValue;
+}
+
+- (void)computeAsyncProperty {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        id result = [self performExpensiveComputation];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            asyncPropertyValue = result;
+            NSDictionary *event = @{
+                @"property": @"asyncProperty",
+                @"value": result
+            };
+            [self fireEvent:@"propertyready" withObject:event];
+        });
+    });
+}
+
+@end
+```
+
+### Swift Property Implementation Patterns
+
+#### Basic Property Access
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    private var _currentValue: String = "default"
+    private var counter: Int = 0
+    
+    // ✅ Simple stored property
+    @objc public var simpleValue: String = ""
+    
+    // ✅ Property with validation and change handling
+    @objc public var currentValue: String {
+        get {
+            NSLog("[DEBUG] Getting currentValue: %@", _currentValue)
+            return _currentValue
+        }
+        set {
+            let value = newValue.isEmpty ? "default" : newValue
+            let oldValue = _currentValue
+            _currentValue = value
+            
+            // ✅ Fire property change event
+            if oldValue != value {
+                let event: [String: Any] = [
+                    "oldValue": oldValue,
+                    "newValue": value,
+                    "property": "currentValue"
+                ]
+                fireEvent("propertychange", withObject: event)
+            }
+            
+            // ✅ Update backing store
+            replaceValue(value, forKey: "currentValue", notification: true)
+            NSLog("[DEBUG] Set currentValue: %@", value)
+        }
+    }
+    
+    // ✅ Read-only computed property
+    @objc public var itemCount: Int {
+        return items?.count ?? 0
+    }
+    
+    // ✅ Property with UI thread handling
+    @objc public var uiBasedProperty: String {
+        get {
+            var result = ""
+            if Thread.isMainThread {
+                result = getCurrentDisplayValue()
+            } else {
+                DispatchQueue.main.sync {
+                    result = getCurrentDisplayValue()
+                }
+            }
+            return result
+        }
+    }
+}
+```
+
+#### Advanced Property Patterns
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    private var propertyCache: [String: Any] = [:]
+    private var cacheEnabled: Bool = true
+    private var asyncPropertyValue: Any?
+    
+    // ✅ Property with caching
+    @objc public var cachedValue: Any? {
+        get {
+            if cacheEnabled, let cached = propertyCache["cachedValue"] {
+                return cached
+            }
+            
+            let value = computeExpensiveValue()
+            if cacheEnabled {
+                propertyCache["cachedValue"] = value
+            }
+            return value
+        }
+        set {
+            propertyCache["cachedValue"] = newValue
+            // Invalidate related cached values
+            propertyCache.removeValue(forKey: "derivedValue")
+        }
+    }
+    
+    // ✅ Property with async computation
+    @objc public var asyncProperty: Any? {
+        get {
+            if asyncPropertyValue == nil {
+                computeAsyncProperty()
+                return "Loading..."
+            }
+            return asyncPropertyValue
+        }
+    }
+    
+    private func computeAsyncProperty() {
+        DispatchQueue.global().async { [weak self] in
+            let result = self?.performExpensiveComputation()
+            
+            DispatchQueue.main.async {
+                self?.asyncPropertyValue = result
+                let event: [String: Any] = [
+                    "property": "asyncProperty",
+                    "value": result ?? NSNull()
+                ]
+                self?.fireEvent("propertyready", withObject: event)
+            }
+        }
+    }
+}
+```
+
+## Property Best Practices
+
+### 1. Property Change Notifications
+```java
+// Android - Always notify when properties change
+@Kroll.setProperty
+public void setImportantValue(String value) {
+    String oldValue = this.importantValue;
+    this.importantValue = value;
+    
+    // Fire specific property change event
+    KrollDict event = new KrollDict();
+    event.put("oldValue", oldValue);
+    event.put("newValue", value);
+    fireEvent("importantvaluechange", event);
+}
+```
+
+```objc
+// iOS - Use KVC compliant property updates
+- (void)setImportantValue:(NSString *)value {
+    [self replaceValue:value forKey:@"importantValue" notification:YES];
+}
+```
+
+### 2. Property Validation
+```java
+// Android - Validate input and provide defaults
+@Kroll.setProperty
+public void setCount(Integer count) {
+    if (count == null || count < 0) {
+        Log.w(TAG, "Invalid count provided, using 0");
+        count = 0;
+    }
+    this.count = count;
+}
+```
+
+### 3. Threading Considerations
+```java
+// Android - Use UI thread when needed
+@Kroll.getProperty(runOnUiThread = true)
+public String getViewBasedProperty() {
+    // Safe to access UI elements here
+    return view != null ? view.getText() : "";
+}
+```
+
+```objc
+// iOS - Ensure UI thread for UI-dependent properties
+- (NSString *)viewBasedProperty {
+    ENSURE_UI_THREAD_1_ARG(viewBasedProperty);
+    return view ? view.text : @"";
+}
+```
+
+### 4. Property Caching Strategy
+```java
+// Android - Cache expensive computations
+private Map<String, Object> cache = new HashMap<>();
+
+@Kroll.getProperty
+public Object getExpensiveProperty() {
+    String key = "expensiveProperty";
+    if (cache.containsKey(key)) {
+        return cache.get(key);
+    }
+    
+    Object value = performExpensiveComputation();
+    cache.put(key, value);
+    return value;
+}
+
+// Clear cache when underlying data changes
+public void invalidateCache() {
+    cache.clear();
+}
+```
+
+## Property Anti-Patterns
+
+❌ **Don't**: Perform expensive operations in property getters without caching
+❌ **Don't**: Access UI elements from background threads in property getters
+❌ **Don't**: Ignore property validation in setters
+❌ **Don't**: Forget to fire change events when properties are modified
+❌ **Don't**: Use properties for operations that should be methods (async operations)
+❌ **Don't**: Cache properties indefinitely without invalidation strategy
+
+## Special Method Naming Conventions
+
+### Underscore Prefix Methods - Internal/System Methods
+
+Methods prefixed with underscore (`_`) have special meaning in Titanium SDK and are treated as **internal system methods** that are **NOT exposed to JavaScript**.
+
+#### iOS (Objective-C/Swift) Underscore Methods
+
+```objc
+@interface MyProxy : TiProxy
+@end
+
+@implementation MyProxy
+
+// ✅ Internal system methods - NOT exposed to JavaScript
+- (void)_configure {
+    // Called automatically when proxy is configured
+    // Override to initialize resources
+    [super _configure];
+}
+
+- (void)_destroy {
+    // Called automatically when proxy is destroyed
+    // Override to clean up resources
+    [super _destroy];
+}
+
+- (void)_listenerAdded:(NSString *)type count:(int)count {
+    // Called automatically when event listeners are added
+    if ([type isEqualToString:@"myevent"] && count == 1) {
+        [self startNativeEventListening];
+    }
+}
+
+- (void)_listenerRemoved:(NSString *)type count:(int)count {
+    // Called automatically when event listeners are removed
+    if ([type isEqualToString:@"myevent"] && count == 0) {
+        [self stopNativeEventListening];
+    }
+}
+
+- (BOOL)_hasListeners:(NSString *)type {
+    // Internal method to check for listeners
+    return [super _hasListeners:type];
+}
+
+// ❌ These methods are NOT accessible from JavaScript
+// JavaScript cannot call: myProxy._configure() or myProxy._destroy()
+
+// ✅ Public methods - exposed to JavaScript
+- (void)configure:(id)args {
+    // This IS accessible from JavaScript as myProxy.configure()
+}
+
+@end
+```
+
+#### Swift Underscore Methods
+
+```swift
+@objc(MyModule) 
+class MyModule: TiModule {
+    
+    // ✅ Internal system methods - NOT exposed to JavaScript
+    @objc override func _configure() {
+        super._configure()
+        // Setup resources
+    }
+    
+    @objc override func _destroy() {
+        super._destroy()
+        // Clean up resources
+    }
+    
+    @objc override func _listenerAdded(_ type: String, count: Int) {
+        if type == "myevent" && count == 1 {
+            startNativeEventListening()
+        }
+    }
+    
+    @objc override func _listenerRemoved(_ type: String, count: Int) {
+        if type == "myevent" && count == 0 {
+            stopNativeEventListening()
+        }
+    }
+    
+    // ✅ Public methods - exposed to JavaScript
+    @objc(publicMethod:)
+    func publicMethod(arguments: Array<Any>?) {
+        // This IS accessible from JavaScript
+    }
+}
+```
+
+### Common System Methods with Underscore
+
+#### Required Override Methods
+```objc
+// iOS - Lifecycle methods
+- (void)_configure;        // Proxy initialization
+- (void)_destroy;          // Proxy cleanup  
+- (NSString *)apiName;     // Public API name (no underscore!)
+
+// Event system methods  
+- (void)_listenerAdded:(NSString *)type count:(int)count;
+- (void)_listenerRemoved:(NSString *)type count:(int)count;
+- (BOOL)_hasListeners:(NSString *)type;
+
+// Internal utility methods
+- (NSURL *)_baseURL;
+- (TiHost *)_host;
+- (void)_fireEventToListener:(NSString *)type withObject:(id)obj listener:(id)listener;
+```
+
+### Android Method Naming
+
+Android uses different patterns since it doesn't rely on underscore prefixes:
+
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    // ✅ Lifecycle methods - automatically called
+    @Override
+    public void onDestroy() {
+        // Clean up resources
+        super.onDestroy();
+    }
+    
+    @Override 
+    public void release() {
+        // Release proxy
+        super.release();
+    }
+    
+    // ✅ Event system methods
+    @Override
+    public void eventListenerAdded(String eventName, int count, KrollProxy proxy) {
+        super.eventListenerAdded(eventName, count, proxy);
+        if (eventName.equals("myevent") && count == 1) {
+            startNativeEventListening();
+        }
+    }
+    
+    @Override
+    public void eventListenerRemoved(String eventName, int count, KrollProxy proxy) {
+        super.eventListenerRemoved(eventName, count, proxy);
+        if (eventName.equals("myevent") && count == 0) {
+            stopNativeEventListening();
+        }
+    }
+    
+    // ✅ Public methods - exposed to JavaScript
+    @Kroll.method
+    public void publicMethod() {
+        // This IS accessible from JavaScript
+    }
+    
+    // ✅ Private helper methods (no @Kroll annotation)
+    private void internalHelperMethod() {
+        // NOT exposed to JavaScript
+    }
+}
+```
+
+### Important Rules for Underscore Methods
+
+#### ✅ **Do Use Underscore For:**
+- `_configure()` - Proxy initialization
+- `_destroy()` - Proxy cleanup  
+- `_listenerAdded()/_listenerRemoved()` for event management
+- Other internal utility methods
+
+#### ❌ **Don't Use Underscore For:**
+- Public API methods that should be accessible from JavaScript
+- `apiName()` - This should NOT have underscore (it's a public identifier)
+- Property getters/setters that should be exposed
+
+### JavaScript Accessibility
+
+```javascript
+// In JavaScript, only non-underscore methods are accessible
+const myProxy = MyModule.createProxy();
+
+// ✅ These work - public methods
+myProxy.publicMethod();
+myProxy.someProperty = "value";
+
+// ❌ These DON'T work - underscore methods are internal
+// myProxy._configure();     // undefined
+// myProxy._destroy();       // undefined  
+// myProxy._listenerAdded(); // undefined
+```
+
+### Best Practices
+
+1. **Always override** `_configure()` for initialization
+2. **Always override** `_destroy()` for cleanup
+3. **Use** `_listenerAdded()/_listenerRemoved()` for event management
+4. **Never** try to call underscore methods from JavaScript
+5. **Remember** that underscore methods are for internal proxy lifecycle only
+
+### Swift @objc Annotation Rules
+
+**Important**: In Swift, the `@objc()` annotation is the primary control for JavaScript exposure, not just underscore prefix.
+
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    // ✅ Exposed to JavaScript - has @objc annotation
+    @objc(publicMethod:)
+    func publicMethod(arguments: Array<Any>?) {
+        // Accessible as myModule.publicMethod() in JavaScript
+    }
+    
+    // ❌ NOT exposed to JavaScript - no @objc annotation
+    func internalHelper() {
+        // Only available in Swift code
+    }
+    
+    // ✅ System method - override with @objc
+    @objc override func _configure() {
+        // Internal lifecycle method (underscore + @objc override)
+    }
+    
+    // ❌ Private helper - no @objc annotation
+    func _myInternalHelper() {
+        // Only available in Swift code (underscore + no @objc)
+    }
+    
+    // ❌ Even with underscore, this would be exposed if it had @objc
+    // @objc(_internalMethod:)  // DON'T do this - confusing API
+    // func _internalMethod(arguments: Array<Any>?) { }
+}
+```
+
+#### Swift Visibility Rules:
+1. **`@objc(methodName:)`** = Exposed to JavaScript with specific name
+2. **`@objc override func _systemMethod()`** = System internal method (lifecycle)  
+3. **No `@objc` annotation** = Private to Swift code only
+4. **Underscore prefix** = Semantic indication of internal use (convention)
+
+## Event Handling
+
+### Android Event Patterns
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    // ✅ Override event listener methods
+    @Override
+    public void eventListenerAdded(String eventName, int count, KrollProxy proxy) {
+        super.eventListenerAdded(eventName, count, proxy);
+        if (eventName.equals("myevent") && count == 1) {
+            // Start listening when first listener added
+            startNativeEventListening();
+        }
+    }
+    
+    @Override
+    public void eventListenerRemoved(String eventName, int count, KrollProxy proxy) {
+        super.eventListenerRemoved(eventName, count, proxy);
+        if (eventName.equals("myevent") && count == 0) {
+            // Stop listening when last listener removed
+            stopNativeEventListening();
+        }
+    }
+    
+    // ✅ Fire events to JavaScript
+    private void onNativeEvent(String data) {
+        if (hasListeners("myevent")) {
+            KrollDict event = new KrollDict();
+            event.put("data", data);
+            event.put("source", this);
+            fireEvent("myevent", event);
+        }
+    }
+}
+```
+
+### iOS Event Patterns
+```objc
+@interface MyProxy : TiProxy
+@end
+
+@implementation MyProxy
+
+// ✅ Event listener management
+- (void)_listenerAdded:(NSString *)type count:(int)count {
+    if ([type isEqualToString:@"myevent"] && count == 1) {
+        // Start listening when first listener added
+        [self startNativeEventListening];
+    }
+}
+
+- (void)_listenerRemoved:(NSString *)type count:(int)count {
+    if ([type isEqualToString:@"myevent"] && count == 0) {
+        // Stop listening when last listener removed
+        [self stopNativeEventListening];
+    }
+}
+
+// ✅ Fire events to JavaScript
+- (void)onNativeEvent:(NSString *)data {
+    if ([self _hasListeners:@"myevent"]) {
+        NSDictionary *event = @{
+            @"data": data,
+            @"source": self
+        };
+        [self fireEvent:@"myevent" withObject:event];
+    }
+}
+
+@end
+```
+
+### Swift Event Patterns
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    // ✅ Event listener management (via Objective-C bridge)
+    @objc override func _listenerAdded(_ type: String, count: Int) {
+        if type == "myevent" && count == 1 {
+            startNativeEventListening()
+        }
+    }
+    
+    @objc override func _listenerRemoved(_ type: String, count: Int) {
+        if type == "myevent" && count == 0 {
+            stopNativeEventListening()
+        }
+    }
+    
+    // ✅ Fire events to JavaScript
+    private func onNativeEvent(data: String) {
+        if _hasListeners("myevent") {
+            let event: [String: Any] = [
+                "data": data,
+                "source": self
+            ]
+            fireEvent("myevent", withObject: event)
+        }
+    }
+}
+```
+
+## Constants and Enums
+
+### Android Constants
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    // ✅ Module constants
+    @Kroll.constant
+    public static final int STATE_IDLE = 0;
+    @Kroll.constant
+    public static final int STATE_ACTIVE = 1;
+    @Kroll.constant
+    public static final int STATE_ERROR = 2;
+    
+    // ✅ String constants
+    @Kroll.constant
+    public static final String EVENT_STATUS_CHANGED = "statuschanged";
+    
+    // ✅ Using Android system constants
+    @Kroll.constant
+    public static final int PRIORITY_HIGH = NotificationManager.IMPORTANCE_HIGH;
+}
+```
+
+### iOS Constants (Objective-C)
+```objc
+@interface MyModule : TiModule
+@end
+
+@implementation MyModule
+
+// ✅ Number constants using MAKE_SYSTEM_PROP
+MAKE_SYSTEM_PROP(STATE_IDLE, 0);
+MAKE_SYSTEM_PROP(STATE_ACTIVE, 1);
+MAKE_SYSTEM_PROP(STATE_ERROR, 2);
+
+// ✅ String constants
+- (NSString *)EVENT_STATUS_CHANGED {
+    return @"statuschanged";
+}
+
+// ✅ Using iOS system constants
+MAKE_SYSTEM_PROP(ANIMATION_CURVE_EASE_IN, UIViewAnimationOptionCurveEaseIn);
+
+@end
+```
+
+### Swift Constants
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    // ✅ Number constants
+    @objc public let STATE_IDLE = 0
+    @objc public let STATE_ACTIVE = 1
+    @objc public let STATE_ERROR = 2
+    
+    // ✅ String constants
+    @objc public let EVENT_STATUS_CHANGED = "statuschanged"
+    
+    // ✅ Computed properties for system constants
+    @objc public var ANIMATION_CURVE_EASE_IN: Int {
+        return UIView.AnimationOptions.curveEaseIn.rawValue
+    }
+}
+```
+
+## Memory Management
+
+### Android Memory Management
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    private Timer backgroundTimer;
+    private BroadcastReceiver receiver;
+    
+    @Override
+    public void onDestroy() {
+        // ✅ Clean up resources
+        if (backgroundTimer != null) {
+            backgroundTimer.cancel();
+            backgroundTimer = null;
+        }
+        
+        if (receiver != null) {
+            try {
+                TiApplication.getInstance().unregisterReceiver(receiver);
+            } catch (IllegalArgumentException e) {
+                // Already unregistered
+            }
+            receiver = null;
+        }
+        
+        super.onDestroy();
+    }
+    
+    @Override
+    public void release() {
+        // ✅ Clean shutdown
+        if (backgroundHandler != null) {
+            backgroundHandler.removeCallbacksAndMessages(null);
+            backgroundHandler = null;
+        }
+        
+        if (backgroundThread != null) {
+            backgroundThread.quitSafely();
+            try {
+                backgroundThread.join(1000); // Wait max 1 second
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            backgroundThread = null;
+        }
+        
+        super.release();
+    }
+}
+```
+
+### iOS Memory Management (Objective-C)
+```objc
+@interface MyProxy : TiProxy {
+    NSTimer *backgroundTimer;
+    NSNotificationCenter *notificationCenter;
+}
+@end
+
+@implementation MyProxy
+
+- (void)_configure {
+    // ✅ Setup resources
+    notificationCenter = [NSNotificationCenter defaultCenter];
+    [notificationCenter addObserver:self 
+                           selector:@selector(handleNotification:)
+                               name:UIApplicationDidEnterBackgroundNotification 
+                             object:nil];
+}
+
+- (void)_destroy {
+    // ✅ Clean up resources
+    if (backgroundTimer) {
+        [backgroundTimer invalidate];
+        [backgroundTimer release];
+        backgroundTimer = nil;
+    }
+    
+    [notificationCenter removeObserver:self];
+    
+    [super _destroy];
+}
+
+- (void)dealloc {
+    [self _destroy];
+    [super dealloc];
+}
+
+@end
+```
+
+### Swift Memory Management
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    private var backgroundTimer: Timer?
+    private var observers: [NSObjectProtocol] = []
+    
+    @objc override func _configure() {
+        super._configure()
+        
+        // ✅ Setup resources
+        let observer = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleBackgroundNotification()
+        }
+        observers.append(observer)
+    }
+    
+    @objc override func _destroy() {
+        // ✅ Clean up resources
+        backgroundTimer?.invalidate()
+        backgroundTimer = nil
+        
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        observers.removeAll()
+        
+        super._destroy()
+    }
+    
+    deinit {
+        _destroy()
+    }
+}
+```
+
+## Module Lifecycle
+
+### Android Module Lifecycle
+```java
+@Kroll.module(name = "MyModule", id = "com.example.mymodule")
+public class MyModule extends KrollModule {
+    
+    // ✅ Module initialization
+    @Kroll.onAppCreate
+    public static void onAppCreate(TiApplication app) {
+        // Called when app is created - before any UI
+        Log.d(TAG, "MyModule loaded");
+    }
+    
+    public MyModule() {
+        super();
+        // Constructor called when module is first accessed
+    }
+    
+    @Override
+    public void onStart(Activity activity) {
+        // Called when activity starts
+        super.onStart(activity);
+    }
+    
+    @Override
+    public void onResume(Activity activity) {
+        // Called when activity resumes
+        super.onResume(activity);
+    }
+    
+    @Override
+    public void onPause(Activity activity) {
+        // Called when activity pauses
+        super.onPause(activity);
+    }
+    
+    @Override
+    public void onStop(Activity activity) {
+        // Called when activity stops
+        super.onStop(activity);
+    }
+    
+    @Override
+    public void onDestroy(Activity activity) {
+        // Called when activity is destroyed
+        super.onDestroy(activity);
+    }
+}
+```
+
+### iOS Module Lifecycle (Objective-C)
+```objc
+@interface MyModule : TiModule
+@end
+
+@implementation MyModule
+
+- (void)_configure {
+    [super _configure];
+    // Called when module is first loaded
+    NSLog(@"[DEBUG] MyModule configured");
+}
+
+- (void)startup {
+    // Called during app startup
+    [super startup];
+    NSLog(@"[DEBUG] MyModule started");
+}
+
+- (void)shutdown:(id)sender {
+    // Called during app shutdown
+    NSLog(@"[DEBUG] MyModule shutting down");
+    [super shutdown:sender];
+}
+
+- (void)suspend:(id)sender {
+    // Called when app goes to background
+    [super suspend:sender];
+}
+
+- (void)resume:(id)sender {
+    // Called when app comes to foreground
+    [super resume:sender];
+}
+
+- (void)paused:(id)sender {
+    // Called when app is paused
+    [super paused:sender];
+}
+
+- (void)resumed:(id)sender {
+    // Called when app is resumed
+    [super resumed:sender];
+}
+
+@end
+```
+
+### Swift Module Lifecycle
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    @objc override func _configure() {
+        super._configure()
+        // Called when module is first loaded
+        print("MyModule configured")
+    }
+    
+    @objc override func startup() {
+        super.startup()
+        // Called during app startup
+        print("MyModule started")
+    }
+    
+    @objc override func shutdown(_ sender: Any?) {
+        // Called during app shutdown
+        print("MyModule shutting down")
+        super.shutdown(sender)
+    }
+    
+    @objc override func suspend(_ sender: Any?) {
+        // Called when app goes to background
+        super.suspend(sender)
+    }
+    
+    @objc override func resume(_ sender: Any?) {
+        // Called when app comes to foreground
+        super.resume(sender)
+    }
+}
+```
+
+## Custom View Components
+
+### Android Custom Views
+```java
+@Kroll.proxy(parentModule = UIModule.class, creatableInModule = UIModule.class)
+public class MyViewProxy extends TiViewProxy {
+    
+    public MyViewProxy() {
+        super();
+    }
+    
+    @Override
+    public TiUIView createView(Activity activity) {
+        // ✅ Create the native view implementation
+        return new MyView(this);
+    }
+    
+    @Override
+    public String getApiName() {
+        return "Ti.UI.MyView";
+    }
+}
+
+// Separate view implementation
+public class MyView extends TiUIView {
+    
+    private TextView nativeView;
+    
+    public MyView(TiViewProxy proxy) {
+        super(proxy);
+        
+        // ✅ Create native Android view
+        nativeView = new TextView(proxy.getActivity());
+        nativeView.setText("Hello from native view");
+        setNativeView(nativeView);
+    }
+    
+    @Override
+    public void processProperties(KrollDict d) {
+        super.processProperties(d);
+        
+        if (d.containsKey("text")) {
+            nativeView.setText(TiConvert.toString(d.get("text")));
+        }
+    }
+}
+```
+
+### iOS Custom Views (Objective-C)
+```objc
+@interface MyViewProxy : TiViewProxy
+@end
+
+@implementation MyViewProxy
+
+- (NSString *)apiName {
+    return @"Ti.UI.MyView";
+}
+
+- (TiUIView *)createView:(TiHost *)host {
+    // ✅ Create the native view implementation
+    return [[[MyView alloc] init] autorelease];
+}
+
+@end
+
+// Separate view implementation
+@interface MyView : TiUIView
+@end
+
+@implementation MyView
+
+- (id)init {
+    if (self = [super init]) {
+        // ✅ Create native iOS view
+        UILabel *nativeView = [[UILabel alloc] init];
+        nativeView.text = @"Hello from native view";
+        [self addSubview:nativeView];
+        [nativeView release];
+    }
+    return self;
+}
+
+- (void)setText_:(id)value {
+    ENSURE_TYPE(value, NSString);
+    ENSURE_UI_THREAD(setText_, value);
+    
+    // Update native view
+    [(UILabel *)[self.subviews firstObject] setText:value];
+}
+
+@end
+```
+
+### Swift Custom Views
+```swift
+@objc(MyViewProxy)
+class MyViewProxy: TiViewProxy {
+    
+    @objc override func apiName() -> String {
+        return "Ti.UI.MyView"
+    }
+    
+    @objc override func createView(_ host: TiHost) -> TiUIView {
+        // ✅ Create the native view implementation
+        return MyView()
+    }
+}
+
+// Separate view implementation
+class MyView: TiUIView {
+    
+    private let nativeLabel = UILabel()
+    
+    override init() {
+        super.init()
+        
+        // ✅ Create native iOS view
+        nativeLabel.text = "Hello from native view"
+        addSubview(nativeLabel)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    @objc func setText(_ value: Any?) {
+        guard let text = value as? String else { return }
+        
+        DispatchQueue.main.async {
+            self.nativeLabel.text = text
+        }
+    }
+}
+```
+
+## Platform-Specific Features
+
+### Conditional Compilation
+```java
+// Android - Use build variants or gradle configurations
+@Kroll.method
+public void platformSpecificMethod() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        // Use modern Android API
+        useModernApi();
+    } else {
+        // Fallback for older versions
+        useLegacyApi();
+    }
+}
+```
+
+```objc
+// iOS - Use preprocessor directives and runtime checks
+@interface MyModule : TiModule
+@end
+
+@implementation MyModule
+
+- (void)platformSpecificMethod:(id)args {
+    if (@available(iOS 13.0, *)) {
+        // Use modern iOS API
+        [self useModernApi];
+    } else {
+        // Fallback for older versions
+        [self useLegacyApi];
+    }
+}
+
+#if TARGET_OS_SIMULATOR
+- (NSString *)getDeviceType {
+    return @"simulator";
+}
+#else
+- (NSString *)getDeviceType {
+    return @"device";
+}
+#endif
+
+@end
+```
+
+```swift
+// Swift - Use availability checks
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    @objc(platformSpecificMethod:)
+    func platformSpecificMethod(arguments: Array<Any>?) {
+        if #available(iOS 13.0, *) {
+            // Use modern iOS API
+            useModernApi()
+        } else {
+            // Fallback for older versions
+            useLegacyApi()
+        }
+    }
+    
+    @objc func getDeviceType() -> String {
+        #if targetEnvironment(simulator)
+        return "simulator"
+        #else
+        return "device"
+        #endif
+    }
+}
+```
+
+## Complex Data Types
+
+### Android Data Handling
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    // ✅ Handling KrollDict (JavaScript objects)
+    @Kroll.method
+    public void processObject(KrollDict data) {
+        String name = data.optString("name", "default");
+        int age = data.optInt("age", 0);
+        boolean active = data.optBoolean("active", false);
+        
+        // Nested object access
+        KrollDict address = data.getKrollDict("address");
+        if (address != null) {
+            String city = address.optString("city", "");
+        }
+    }
+    
+    // ✅ Returning complex data
+    @Kroll.method
+    public KrollDict getUserData() {
+        KrollDict result = new KrollDict();
+        result.put("name", "John Doe");
+        result.put("age", 30);
+        result.put("preferences", new String[]{"option1", "option2"});
+        
+        KrollDict address = new KrollDict();
+        address.put("city", "Copenhagen");
+        address.put("country", "Denmark");
+        result.put("address", address);
+        
+        return result;
+    }
+    
+    // ✅ Array handling
+    @Kroll.method
+    public void processArray(Object[] items) {
+        for (Object item : items) {
+            if (item instanceof KrollDict) {
+                processObject((KrollDict) item);
+            }
+        }
+    }
+}
+```
+
+### iOS Data Handling (Objective-C)
+```objc
+@interface MyProxy : TiProxy
+@end
+
+@implementation MyProxy
+
+// ✅ Handling NSDictionary (JavaScript objects)
+- (void)processObject:(id)args {
+    ENSURE_SINGLE_ARG(args, NSDictionary);
+    NSDictionary *data = (NSDictionary *)args;
+    
+    NSString *name = [data objectForKey:@"name"] ?: @"default";
+    NSNumber *ageNum = [data objectForKey:@"age"];
+    int age = ageNum ? [ageNum intValue] : 0;
+    
+    // Nested object access
+    NSDictionary *address = [data objectForKey:@"address"];
+    if (address && [address isKindOfClass:[NSDictionary class]]) {
+        NSString *city = [address objectForKey:@"city"] ?: @"";
+    }
+}
+
+// ✅ Returning complex data
+- (NSDictionary *)getUserData:(id)args {
+    return @{
+        @"name": @"John Doe",
+        @"age": @30,
+        @"preferences": @[@"option1", @"option2"],
+        @"address": @{
+            @"city": @"Copenhagen",
+            @"country": @"Denmark"
+        }
+    };
+}
+
+// ✅ Array handling
+- (void)processArray:(id)args {
+    ENSURE_SINGLE_ARG(args, NSArray);
+    NSArray *items = (NSArray *)args;
+    
+    for (id item in items) {
+        if ([item isKindOfClass:[NSDictionary class]]) {
+            [self processObject:item];
+        }
+    }
+}
+
+@end
+```
+
+### Swift Data Handling
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    // ✅ Handling dictionaries (JavaScript objects)
+    @objc(processObject:)
+    func processObject(arguments: Array<Any>?) {
+        guard let args = arguments,
+              let data = args.first as? [String: Any] else { return }
+        
+        let name = data["name"] as? String ?? "default"
+        let age = data["age"] as? Int ?? 0
+        let active = data["active"] as? Bool ?? false
+        
+        // Nested object access
+        if let address = data["address"] as? [String: Any] {
+            let city = address["city"] as? String ?? ""
+        }
+    }
+    
+    // ✅ Returning complex data
+    @objc(getUserData:)
+    func getUserData(arguments: Array<Any>?) -> [String: Any] {
+        return [
+            "name": "John Doe",
+            "age": 30,
+            "preferences": ["option1", "option2"],
+            "address": [
+                "city": "Copenhagen",
+                "country": "Denmark"
+            ]
+        ]
+    }
+    
+    // ✅ Array handling
+    @objc(processArray:)
+    func processArray(arguments: Array<Any>?) {
+        guard let args = arguments,
+              let items = args.first as? [Any] else { return }
+        
+        for item in items {
+            if let dict = item as? [String: Any] {
+                processObject(arguments: [dict])
+            }
+        }
+    }
+}
+```
+
+## Debugging and Testing
+
+### Android Debug Patterns
+```java
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    private static final String TAG = "MyProxy";
+    private static final boolean DBG = TiConfig.LOGD;
+    
+    @Kroll.method
+    public void debugMethod(String input) {
+        // ✅ Use Titanium logging
+        if (DBG) {
+            Log.d(TAG, "debugMethod called with: " + input);
+        }
+        
+        try {
+            // Your implementation
+            processInput(input);
+            
+            if (DBG) {
+                Log.d(TAG, "debugMethod completed successfully");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error in debugMethod: " + e.getMessage(), e);
+            throw e; // Re-throw to let JavaScript handle it
+        }
+    }
+    
+    // ✅ Performance measurement
+    @Kroll.method
+    public void performanceCriticalMethod() {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            // Your implementation
+            heavyOperation();
+        } finally {
+            if (DBG) {
+                long duration = System.currentTimeMillis() - startTime;
+                Log.d(TAG, "performanceCriticalMethod took: " + duration + "ms");
+            }
+        }
+    }
+}
+```
+
+### iOS Debug Patterns (Objective-C)
+```objc
+@interface MyProxy : TiProxy
+@end
+
+@implementation MyProxy
+
+- (void)debugMethod:(id)args {
+    ENSURE_SINGLE_ARG(args, NSString);
+    NSString *input = (NSString *)args;
+    
+    // ✅ Use Titanium logging
+    DebugLog(@"[DEBUG] debugMethod called with: %@", input);
+    
+    @try {
+        // Your implementation
+        [self processInput:input];
+        
+        DebugLog(@"[DEBUG] debugMethod completed successfully");
+    } @catch (NSException *ex) {
+        NSLog(@"[ERROR] Error in debugMethod: %@", ex.reason);
+        @throw ex; // Re-throw to let JavaScript handle it
+    }
+}
+
+// ✅ Performance measurement
+- (void)performanceCriticalMethod:(id)args {
+    CFTimeInterval startTime = CACurrentMediaTime();
+    
+    @try {
+        // Your implementation
+        [self heavyOperation];
+    } @finally {
+        CFTimeInterval duration = CACurrentMediaTime() - startTime;
+        DebugLog(@"[DEBUG] performanceCriticalMethod took: %.2fms", duration * 1000);
+    }
+}
+
+@end
+```
+
+### Swift Debug Patterns
+```swift
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    @objc(debugMethod:)
+    func debugMethod(arguments: Array<Any>?) {
+        guard let args = arguments,
+              let input = args.first as? String else { return }
+        
+        // ✅ Use NSLog for proper console output in Xcode
+        NSLog("[DEBUG] debugMethod called with: %@", input)
+        
+        do {
+            // Your implementation
+            try processInput(input)
+            NSLog("[DEBUG] debugMethod completed successfully")
+        } catch {
+            NSLog("[ERROR] Error in debugMethod: %@", error.localizedDescription)
+            throw error // Re-throw to let JavaScript handle it
+        }
+    }
+    
+    // ✅ Performance measurement
+    @objc(performanceCriticalMethod:)
+    func performanceCriticalMethod(arguments: Array<Any>?) {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        defer {
+            let duration = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+            NSLog("[DEBUG] performanceCriticalMethod took: %.2fms", duration)
+        }
+        
+        // Your implementation
+        heavyOperation()
+    }
+    
+    // ✅ Additional logging utility
+    private func logDebug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+        let fileName = URL(fileURLWithPath: file).lastPathComponent
+        NSLog("[DEBUG] %@:%d %@() - %@", fileName, line, function, message)
+    }
+    
+    private func logError(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+        let fileName = URL(fileURLWithPath: file).lastPathComponent
+        NSLog("[ERROR] %@:%d %@() - %@", fileName, line, function, message)
+    }
+}
+```
+
+## Module Distribution and Manifest
+
+### Module Structure
+```
+my-module/
+├── android/
+│   ├── manifest              # Android-specific files
+│   ├── src/
+│   ├── lib/
+│   └── build.xml
+├── ios/
+│   ├── manifest              # iOS-specific files
+│   ├── Classes/
+│   ├── Resources/
+│   └── module.xcconfig
+├── documentation/
+│   └── index.md
+├── example/
+│   └── app.js
+├── assets/                   # Cross-platform assets
+├── CHANGELOG.md
+├── LICENSE
+├── README.md
+├── package.json             # For npm distribution
+└── timodule.xml             # Module manifest
+```
+
+### timodule.xml Example
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<ti:module xmlns:ti="http://ti.titaniumsdk.com/xsd/ti_module.xsd"
+           xmlns:tns="http://ti.titaniumsdk.com/xsd/ti_module.xsd">
+    
+    <!-- Module metadata -->
+    <id>com.example.mymodule</id>
+    <name>mymodule</name>
+    <version>1.0.0</version>
+    <description>My awesome Titanium module</description>
+    <author>Your Name</author>
+    <license>MIT</license>
+    <copyright>Copyright (c) 2024 Your Name</copyright>
+    
+    <!-- Supported platforms -->
+    <platform>android</platform>
+    <platform>iphone</platform>
+    
+    <!-- Deployment targets -->
+    <deployment-targets>
+        <target device="android" minSDK="21" />
+        <target device="iphone" minSDK="12.0" />
+    </deployment-targets>
+    
+    <!-- Dependencies -->
+    <modules>
+        <module platform="android">ti.map</module>
+        <module platform="iphone">ti.map</module>
+    </modules>
+    
+    <!-- Android-specific settings -->
+    <android xmlns:android="http://schemas.android.com/apk/res/android">
+        <manifest>
+            <uses-permission android:name="android.permission.INTERNET" />
+            <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+        </manifest>
+    </android>
+    
+    <!-- iOS-specific settings -->
+    <ios>
+        <info.plist>
+            <key>NSLocationWhenInUseUsageDescription</key>
+            <string>This app needs location access</string>
+        </info.plist>
+    </ios>
+    
+</ti:module>
+```
+
+## Advanced Best Practices
+
+### Error Handling
+```java
+// Android - Proper error handling
+@Kroll.method
+public void methodWithErrorHandling(String input) {
+    try {
+        validateInput(input);
+        performOperation(input);
+    } catch (IllegalArgumentException e) {
+        // Handle parameter validation errors
+        Log.e(TAG, "Invalid parameter: " + e.getMessage());
+        throw new IllegalArgumentException("Invalid input: " + e.getMessage());
+    } catch (SecurityException e) {
+        // Handle permission errors
+        Log.e(TAG, "Permission denied: " + e.getMessage());
+        throw new SecurityException("Permission required: " + e.getMessage());
+    } catch (Exception e) {
+        // Handle unexpected errors
+        Log.e(TAG, "Unexpected error: " + e.getMessage(), e);
+        throw new RuntimeException("Operation failed: " + e.getMessage());
+    }
+}
+```
+
+```objc
+// iOS - Proper error handling
+- (void)methodWithErrorHandling:(id)args {
+    ENSURE_SINGLE_ARG(args, NSArray);
+    NSArray *input = (NSArray *)args;
+    
+    @try {
+        [self validateInput:input];
+        [self performOperation:input];
+    } @catch (NSException *ex) {
+        NSLog(@"[ERROR] %@: %@", ex.name, ex.reason);
+        
+        if ([ex.name isEqualToString:NSInvalidArgumentException]) {
+            [self throwException:@"Invalid parameter" 
+                       subreason:ex.reason 
+                        location:CODELOCATION];
+        } else {
+            [self throwException:@"Operation failed" 
+                       subreason:ex.reason 
+                        location:CODELOCATION];
+        }
+    }
+}
+```
+
+### Resource Management
+```java
+// Android - Resource cleanup
+@Kroll.proxy(parentModule = MyModule.class)
+public class MyProxy extends KrollProxy {
+    
+    private Handler backgroundHandler;
+    private HandlerThread backgroundThread;
+    
+    public MyProxy() {
+        super();
+        
+        // ✅ Initialize background thread
+        backgroundThread = new HandlerThread("MyModule-Background");
+        backgroundThread.start();
+        backgroundHandler = new Handler(backgroundThread.getLooper());
+    }
+    
+    @Override
+    public void release() {
+        // ✅ Clean shutdown
+        if (backgroundHandler != null) {
+            backgroundHandler.removeCallbacksAndMessages(null);
+            backgroundHandler = null;
+        }
+        
+        if (backgroundThread != null) {
+            backgroundThread.quitSafely();
+            try {
+                backgroundThread.join(1000); // Wait max 1 second
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            backgroundThread = null;
+        }
+        
+        super.release();
+    }
+}
+```
+
+## Module Testing
+
+### Unit Testing Structure
+```
+tests/
+├── unit/
+│   ├── android/
+│   │   └── src/test/java/
+│   └── ios/
+│       └── UnitTests/
+├── integration/
+│   └── app.js
+└── fixtures/
+    └── test-data.json
+```
+
+### JavaScript Integration Test
+```javascript
+// integration/app.js
+const myModule = require('com.example.mymodule');
+
+// Test basic functionality
+Ti.API.info('Testing myModule...');
+
+try {
+    // Test property access
+    const version = myModule.version;
+    Ti.API.info('Module version: ' + version);
+    
+    // Test method calls
+    const result = myModule.processData('test');
+    Ti.API.info('processData result: ' + result);
+    
+    // Test async operations
+    myModule.asyncOperation()
+        .then(result => {
+            Ti.API.info('Async result: ' + JSON.stringify(result));
+        })
+        .catch(error => {
+            Ti.API.error('Async error: ' + error);
+        });
+    
+    // Test event handling
+    myModule.addEventListener('myevent', function(e) {
+        Ti.API.info('Event received: ' + JSON.stringify(e));
+    });
+    
+    Ti.API.info('All tests completed successfully');
+} catch (error) {
+    Ti.API.error('Test failed: ' + error);
+}
+```
+
+## Platform-Specific Features
+
+### Conditional Compilation
+```java
+// Android - Use build variants or gradle configurations
+@Kroll.method
+public void platformSpecificMethod() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        // Use modern Android API
+        useModernApi();
+    } else {
+        // Fallback for older versions
+        useLegacyApi();
+    }
+}
+```
+
+```objc
+// iOS - Use preprocessor directives and runtime checks
+@interface MyModule : TiModule
+@end
+
+@implementation MyModule
+
+- (void)platformSpecificMethod:(id)args {
+    if (@available(iOS 13.0, *)) {
+        // Use modern iOS API
+        [self useModernApi];
+    } else {
+        // Fallback for older versions
+        [self useLegacyApi];
+    }
+}
+
+#if TARGET_OS_SIMULATOR
+- (NSString *)getDeviceType {
+    return @"simulator";
+}
+#else
+- (NSString *)getDeviceType {
+    return @"device";
+}
+#endif
+
+@end
+```
+
+```swift
+// Swift - Use availability checks
+@objc(MyModule)
+class MyModule: TiModule {
+    
+    @objc(platformSpecificMethod:)
+    func platformSpecificMethod(arguments: Array<Any>?) {
+        if #available(iOS 13.0, *) {
+            // Use modern iOS API
+            useModernApi()
+        } else {
+            // Fallback for older versions
+            useLegacyApi()
+        }
+    }
+    
+    @objc func getDeviceType() -> String {
+        #if targetEnvironment(simulator)
+        return "simulator"
+        #else
+        return "device"
+        #endif
+    }
+}
+``` 

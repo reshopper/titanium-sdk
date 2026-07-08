@@ -659,7 +659,7 @@ events:
         summary: |
            The expected y axis offset when the scrolling action decelerates to a stop.
         type: Number
-      
+
       - name: visibleItemCount
         summary: The number of visible items in the list view when the event fires.
         type: Number
@@ -759,6 +759,16 @@ properties:
     default: false
     availability: creation
     since: 11.0.0
+    platforms: [android]
+
+  - name: animation
+    summary: Assign an animation to the ListItems
+    description: |
+        You can use an Android resource ID to assign an animation XML to ListItems. For example 
+        `Titanium.App.Android.R.anim.anim_one` will match `app/platform/android/res/anim/anim_one.xml`.
+    type: Number
+    availability: creation
+    since: 12.0.0
     platforms: [android]
 
   - name: allowsSelectionDuringEditing
@@ -988,6 +998,23 @@ properties:
     default: false
     platforms: [android, iphone, ipad, macos]
     since: 11.1.0
+
+  - name: clipViews
+    summary: |
+        Determines whether the items outside of the padding are clipped.
+    description: |
+        You have to set the [padding](Titanium.UI.ListView.padding) property to make use of this property.
+    type: Boolean
+    availability: creation
+    default: true
+    since: { android: 12.8.0 }
+    platforms: [android]
+
+  - name: padding
+    summary: The padding applied to the ListView view.
+    platforms: [android]
+    type: Padding
+    since: "12.8.0"
 
   - name: forceUpdates
     summary: Optimize the `continuousUpdate` scrolling event.
@@ -1275,6 +1302,18 @@ methods:
 
       - name: animation
         summary: Animation properties. (iOS, Android and Windows)
+        type: ListViewAnimationProperties
+        optional: true
+
+  - name: scrollToBottom
+    summary: Scrolls the list to the last item.
+    description: |
+        Scrolls to the bottom-most item of the list. Supports the same `animation` options
+        as `scrollToItem`, including `animated` and `position` to control where the last
+        item should be aligned after scrolling.
+    parameters:
+      - name: animation
+        summary: Animation properties.
         type: ListViewAnimationProperties
         optional: true
 

@@ -2266,6 +2266,24 @@ properties:
     platforms: [iphone, ipad, macos]
     since: "8.1.0"
 
+  - name: targetImageSize
+    summary: Specifies the target size for the largest dimension of the selected image.
+    description: |
+        When set, the selected image will be scaled so that its largest dimension (width or height)
+        matches the specified value while maintaining the original aspect ratio.
+
+        This works for both scaling down larger images and scaling up smaller images.
+
+        For example, with `targetImageSize: 1000`:
+        - An image of 4000x3000 will be scaled to 1000x750
+        - An image of 400x300 will be scaled to 1000x750
+        - An image of 3000x4000 will be scaled to 750x1000
+
+        This option only affects images, not videos.
+    type: Number
+    platforms: [android, iphone, ipad, macos]
+    since: "12.7.0"
+
 ---
 name: CameraMediaMultipleItemsType
 summary: A media object from photo gallery when <Titanium.Media.allowMultiple> is `true`.

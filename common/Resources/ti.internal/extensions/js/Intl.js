@@ -60,11 +60,27 @@ if (OS_ANDROID) {
 	}
 	TiNumberFormat.supportedLocalesOf = Ti.Locale.getSupportedNumberFormatLocales;
 
+	// Set up an "Intl.DisplayNames" type which wraps our undocumented "Ti.Locale.DisplayNames" proxy.
+	function TiDisplayNames() {
+		const properties = makeTiFormatCreationPropertiesFrom(arguments, Ti.Locale.getSupportedDisplayNamesLocales);
+		return new Ti.Locale.DisplayNames(properties);
+	}
+	TiDisplayNames.supportedLocalesOf = Ti.Locale.getSupportedDisplayNamesLocales;
+
+	// Set up an "Intl.RelativeTimeFormat" type which wraps our undocumented "Ti.Locale.RelativeTimeFormat" proxy.
+	function TiRelativeTimeFormat() {
+		const properties = makeTiFormatCreationPropertiesFrom(arguments, Ti.Locale.getSupportedRelativeTimeFormatLocales);
+		return new Ti.Locale.RelativeTimeFormat(properties);
+	}
+	TiRelativeTimeFormat.supportedLocalesOf = Ti.Locale.getSupportedRelativeTimeFormatLocales;
+
 	// Make our custom "Intl" module available globally.
 	global.Intl = {
 		Collator: TiCollator,
 		DateTimeFormat: TiDateTimeFormat,
+		DisplayNames: TiDisplayNames,
 		NumberFormat: TiNumberFormat,
+		RelativeTimeFormat: TiRelativeTimeFormat,
 		getCanonicalLocales: Ti.Locale.getCanonicalLocales
 	};
 }

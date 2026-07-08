@@ -86,7 +86,22 @@ export class IOS {
 	async copyLegacyHeaders(DEST_IOS) {
 		// Gather all the *.h files in TitaniumKit, create "redirecting" headers in iphone/include that point to the TitaniumKit ones
 		await fs.ensureDir(path.join(DEST_IOS, 'include'));
-		let headersDir = path.join(IOS_ROOT, 'TitaniumKit/build/TitaniumKit.xcframework/ios-arm64/TitaniumKit.framework/Headers');
+		// Prefer simulator headers if available (arm64/x86_64), otherwise fall back to device
+		let headersDir;
+		const tryHeaders = [
+			path.join(IOS_ROOT, 'TitaniumKit/build/TitaniumKit.xcframework/ios-arm64_x86_64-simulator/TitaniumKit.framework/Headers'),
+			path.join(IOS_ROOT, 'TitaniumKit/build/TitaniumKit.xcframework/ios-arm64-simulator/TitaniumKit.framework/Headers'),
+			path.join(IOS_ROOT, 'TitaniumKit/build/TitaniumKit.xcframework/ios-arm64/TitaniumKit.framework/Headers')
+		];
+		for (const candidate of tryHeaders) {
+			if (fs.existsSync(candidate)) {
+				headersDir = candidate;
+				break;
+			}
+		}
+		if (!headersDir) {
+			headersDir = path.join(IOS_ROOT, 'TitaniumKit/build/TitaniumKit.xcframework/ios-arm64/TitaniumKit.framework/Headers');
+		}
 		const subdirs = await fs.readdir(headersDir);
 		// create them all in parallel
 		await Promise.all(subdirs.map(file => {

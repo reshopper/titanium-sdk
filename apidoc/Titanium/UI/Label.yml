@@ -217,6 +217,15 @@ properties:
     type: Number
     since: {android: "4.1.0", iphone: "6.1.0", ipad: "6.1.0"}
 
+  - name: padding
+    summary: Sets the padding of this label.
+    description: |
+        Sets the inner padding between the label's text and its edges.
+        The padding is specified as a dictionary with the properties `left`, `top`, `right`, and `bottom`.
+    type: Padding
+    platforms: [android, iphone, ipad, macos]
+    since: "13.3.0"
+
   - name: minimumFontSize
     summary: Minimum font size when the font is sized based on the contents.
     description: |

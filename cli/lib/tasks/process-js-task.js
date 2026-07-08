@@ -1,4 +1,5 @@
 import { IncrementalFileTask } from 'appc-tasks';
+import ChangeManagerModule from 'appc-tasks/dist/incremental/ChangeManager.js';
 import crypto from 'node:crypto';
 import fs from 'fs-extra';
 import jsanalyze from 'node-titanium-sdk/lib/jsanalyze.js';
@@ -9,6 +10,7 @@ import { promisify } from 'node:util';
 
 const MAX_SIMULTANEOUS_FILES = 256;
 const limit = pLimit(MAX_SIMULTANEOUS_FILES);
+const ChangeManager = ChangeManagerModule.default;
 
 /**
  * Task that processes JS files by applying several transforms and copying them to their
@@ -129,8 +131,6 @@ export class ProcessJsTask extends IncrementalFileTask {
 	/**
 	 * Does an incremental task run, processing only changed files.
 	 *
-	 * For backwards compatibiliy this will currently also call processJsFile for unchanged files.
-	 *
 	 * @param {Map<String, String>} changedFiles Map of file paths and their current file state (created, changed, deleted)
 	 * @return {Promise}
 	 */
@@ -149,9 +149,17 @@ export class ProcessJsTask extends IncrementalFileTask {
 		const updatedFiles = this.filterFilesByStatus(changedFiles, [ 'created', 'changed' ]);
 		const updatedPromise = Promise.all(updatedFiles.map(filePath => limit(() => this.processJsFile(filePath))));
 
-		// @fixme: can be removed in 9.0 to even further decrease build times on incremental builds
-		const unchangedFiles = Array.from(this.inputFiles).filter(filePath => !changedFiles.has(filePath));
-		const unchangedPromise = Promise.all(unchangedFiles.map(filePath => limit(() => this.processJsFile(filePath))));
+		// Optimering: Spring over processering af uændrede filer for hurtigere builds
+		// Dette var planlagt fjernet i 9.0, men vi implementerer det nu for bedre performance
+		const shouldProcessUnchangedFiles = this.platform !== 'ios' || this.builder.target !== 'simulator';
+		let unchangedPromise = Promise.resolve();
+		if (shouldProcessUnchangedFiles) {
+			const unchangedFiles = Array.from(this.inputFiles).filter(filePath => !changedFiles.has(filePath));
+			unchangedPromise = Promise.all(unchangedFiles.map(filePath => limit(() => this.processJsFile(filePath))));
+			this.logger.trace(`Processing ${unchangedFiles.length} unchanged files for hooks compatibility`);
+		} else {
+			this.logger.trace('Skipping unchanged files processing for simulator build optimization');
+		}
 
 		return Promise.all([ deletedPromise, updatedPromise, unchangedPromise ]);
 	}
@@ -163,8 +171,8 @@ export class ProcessJsTask extends IncrementalFileTask {
 	 * we also depend on some config values from the builder this is used to
 	 * fallback to a full task run if required.
 	 *
-	 * This will also dummy process the unchanged JS files again to properly
-	 * fire expected hooks and populate the builder with required data.
+	 * When no files have changed, we simply restore the cached data without
+	 * reprocessing any files.
 	 *
 	 * @return {Promise}
 	 */
@@ -175,8 +183,16 @@ export class ProcessJsTask extends IncrementalFileTask {
 			return this.doFullTaskRun();
 		}
 
+		// Restore cached data from previous run
 		this.jsFiles = this.data.jsFiles;
 		this.jsBootstrapFiles.splice(0, 0, ...this.data.jsBootstrapFiles);
+
+		// For simulator builds, vi kan springe over processering af alle filer når ingen er ændrede
+		if (this.platform === 'ios' && this.builder.target === 'simulator') {
+			this.logger.trace('No files changed, skipping all JS processing for simulator build');
+			return Promise.resolve();
+		}
+
 		return Promise.all(Array.from(this.inputFiles).map(filePath => limit(() => this.processJsFile(filePath))));
 	}
 
@@ -395,10 +411,19 @@ export class ProcessJsTask extends IncrementalFileTask {
 
 		const currentAnalyzeOptionsHash = this.generateHash(JSON.stringify(this.defaultAnalyzeOptions));
 		if (!this.data.analyzeOptionsHash || this.data.analyzeOptionsHash !== currentAnalyzeOptionsHash) {
+			// For simulator builds, jsanalyze options changes are less critical
+			if (this.platform === 'ios' && this.builder.target === 'simulator') {
+				this.logger.trace('jsanalyze options changed, but allowing incremental build for simulator');
+				// Update hash to prevent repeated warnings
+				this.data.analyzeOptionsHash = currentAnalyzeOptionsHash;
+				return false;
+			}
 			this.logger.trace('Full build required, jsanalyze options changed.');
+			this.logger.trace(`Analyze options: ${JSON.stringify(this.defaultAnalyzeOptions, null, 2)}`);
 			return true;
 		}
 
+		this.logger.trace('Incremental build can proceed, analyze options unchanged.');
 		return false;
 	}
 
@@ -449,5 +474,54 @@ export class ProcessJsTask extends IncrementalFileTask {
 			tiSymbols: {},
 			jsFiles: {}
 		};
+	}
+
+	/**
+	 * Override runTaskAction to add detailed logging about build decisions
+	 */
+	runTaskAction() {
+		let changeManager = new ChangeManager();
+		let fullBuild = !changeManager.load(this.incrementalDirectory);
+
+		this.inputFiles.forEach(inputPath => {
+			changeManager.monitorInputPath(inputPath);
+		});
+		this.incrementalOutputs.forEach(outputPath => {
+			changeManager.monitorOutputPath(outputPath);
+		});
+
+		let changedInputFiles = changeManager.getChangedInputFiles();
+		let changedOutputFiles = changeManager.getChangedOutputFiles();
+		let runPromise;
+
+		if (fullBuild) {
+			this.logger.trace('No incremental data found, do full task run');
+			this.logger.trace(`Incremental directory: ${this.incrementalDirectory}`);
+			runPromise = this.doFullTaskRun();
+		} else if (changedOutputFiles.size > 0) {
+			this.logger.trace(`Output files changed (${changedOutputFiles.size} files), do full task run`);
+			for (let [filePath, status] of changedOutputFiles) {
+				this.logger.trace(`  ${status}: ${filePath}`);
+			}
+			runPromise = this.doFullTaskRun();
+		} else if (changedInputFiles.size > 0) {
+			this.logger.trace(`Input files changed (${changedInputFiles.size} files), do incremental task run`);
+			for (let [filePath, status] of changedInputFiles) {
+				this.logger.trace(`  ${status}: ${filePath}`);
+			}
+			runPromise = this.doIncrementalTaskRun(changedInputFiles);
+		} else {
+			this.logger.trace('Nothing changed, skip task run');
+			runPromise = this.loadResultAndSkip();
+		}
+
+		return runPromise.then(taskResult => {
+			changeManager.updateOutputFiles(this.incrementalOutputs);
+			changeManager.write(this.incrementalDirectory);
+			return taskResult;
+		}).catch(reason => {
+			changeManager.delete(this.incrementalDirectory);
+			return Promise.reject(reason);
+		});
 	}
 }

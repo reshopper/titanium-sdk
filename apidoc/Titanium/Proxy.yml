@@ -15,6 +15,14 @@ description: |
     In general, developers should avoid modifying the prototype of a Titanium object, or
     adding methods to a Titanium object. (Adding a simple property such as an ID value is
     generally OK.)
+
+    Some Titanium objects are not represented by native objects, so they exist only as 
+    JavaScript objects.
+
+    ## Subclassing Titanium.Proxy
+
+    The Proxy class is not intended to be subclassed by developers. To create custom 
+    objects based on Titanium.Proxy, see <Titanium.Module>.
 since: "0.1"
 createable: false
 
@@ -56,6 +64,71 @@ methods:
         summary: Callback function to remove. Must be the same function passed to `addEventListener`.
         type: Callback<Titanium.Event>
 
+  - name: hasListener
+    summary: Returns `true` if the proxy has listeners for the specified event name.
+    description: |
+        This method allows you to check if the proxy has any event listeners 
+        registered for a specific event type without having to maintain your own
+        listener tracking.
+
+        Example usage:
+
+            var view = Ti.UI.createView();
+            
+            console.log(view.hasListener('click')); // false
+            
+            view.addEventListener('click', function() {
+                console.log('Clicked!');
+            });
+            
+            console.log(view.hasListener('click')); // true
+
+    parameters:
+      - name: name
+        summary: Name of the event to check.
+        type: String
+        
+    returns:
+        type: Boolean
+        summary: Returns `true` if the proxy has listeners for the specified event, `false` otherwise.
+        
+    since: "11.0.0"
+
+  - name: removeAllListeners
+    summary: Removes all listeners for the specified event, or all listeners for all events if no event name is specified.
+    description: |
+        This method provides a convenient way to remove multiple event listeners at once.
+        It is particularly useful for cleanup operations when destroying views or 
+        resetting proxy state.
+
+        If called with an event name, removes all listeners for that specific event:
+
+            var view = Ti.UI.createView();
+            view.addEventListener('click', function() { console.log('Handler 1'); });
+            view.addEventListener('click', function() { console.log('Handler 2'); });
+            view.addEventListener('swipe', function() { console.log('Swipe handler'); });
+            
+            view.removeAllListeners('click'); // Removes both click handlers
+            console.log(view.hasListener('click')); // false
+            console.log(view.hasListener('swipe')); // true (swipe handler still present)
+
+        If called without arguments, removes all listeners for all events:
+
+            view.removeAllListeners(); // Removes ALL event listeners
+            console.log(view.hasListener('swipe')); // false
+
+        This method removes both named function listeners and anonymous function listeners.
+
+    parameters:
+      - name: name
+        summary: |
+            Name of the event to remove all listeners for. 
+            If not specified, removes all listeners for all events.
+        type: String
+        optional: true
+        
+    since: "11.0.0"
+
   - name: fireEvent
     summary: Fires a synthesized event to any registered listeners.
     parameters:
@@ -77,7 +150,7 @@ methods:
       - name: props
         summary: A dictionary of properties to apply.
         type: Dictionary
-    since: {android: "3.0.0",  iphone: "3.0.0", ipad: "3.0.0"}
+    since: {android: "3.0.0",  iphone: "3.0.0",ipad: "3.0.0"}
 
 properties:
   - name: bubbleParent
@@ -91,7 +164,7 @@ properties:
     type: Boolean
     default: true
     platforms: [iphone, ipad, android, macos]
-    since: {android: "3.0.0",  iphone: "3.0.0", ipad: "3.0.0", macos: "9.2.0"}
+    since: {android: "3.0.0",  iphone: "3.0.0",ipad: "3.0.0", macos: "9.2.0"}
 
   - name: apiName
     summary: The name of the API that this proxy corresponds to.
@@ -101,7 +174,7 @@ properties:
     permission: read-only
     type: String
     platforms: [android, iphone, ipad, macos]
-    since: {android: "3.2.0",  iphone: "3.2.0", ipad: "3.2.0", macos: "9.2.0"}
+    since: {android: "3.2.0",  iphone: "3.2.0",ipad: "3.2.0", macos: "9.2.0"}
 
   - name: lifecycleContainer
     summary: The Window or TabGroup whose Activity lifecycle should be triggered on the proxy.
@@ -112,3 +185,12 @@ properties:
     type: [Titanium.UI.Window, Titanium.UI.TabGroup]
     platforms: [android]
     since: "3.6.0"
+
+events:
+  - name: focus
+    summary: Fired when the proxy gains focus.
+    since: "0.1"
+    
+  - name: blur  
+    summary: Fired when the proxy loses focus.
+    since: "0.1"

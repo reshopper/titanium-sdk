@@ -45,10 +45,18 @@ methods:
       - name: options
         summary: |
             A simple object for specifying the animation properties when scrolling the view (since SDK 6.1.0).
-            When set to `{ animated: true }` it will scroll smoothly to the destination.
+            Når sat til `{ animated: true }` scroller den glidende til destinationen.
 
-            Note that the default here is equivalent to passing in `{ animated: true }`
-        type: AnimatedOptions
+            På Android kan du angive yderligere felter: `duration` og `curve`.
+            `curve` bruger `Ti.UI.ANIMATION_CURVE_*`-konstanter.
+
+            Bemærk at standarden svarer til at angive `{ animated: true }`.
+            
+            Properties:
+            - `animated` (Boolean): Animate scrollovergangen.
+            - `duration` (Number, Android): Varighed i millisekunder for den animerede scroll.
+            - `curve` (Number, Android): Easing-kurve for scrollanimationen. Bruger `Ti.UI.ANIMATION_CURVE_*` konstanter.
+        type: Dictionary
         optional: true
         default: "{ animated: true }"
 
@@ -68,6 +76,36 @@ methods:
         type: AnimatedOptions
         optional: true
         default: "{ animated: true }"
+
+  - name: setContentInsets
+    summary: Sets the content insets of the scroll view with optional animation.
+    description: |
+        The distance the scroll view's content is inset from its edges.
+        
+        Content insets are expressed as a dictionary with `top`, `right`, `bottom`, and `left` 
+        properties that specify the distance, in pixels, that the content view is inset from 
+        the corresponding edges of the scroll view.
+
+        For example: `{top: 64, left: 0, bottom: 0, right: 0}` insets the top of the scrollable 
+        area by 64 pixels.
+        
+        Note: The correct property name is `contentInsets` (plural). Using `contentInset` (singular)
+        is not supported and will cause TypeScript errors.
+    platforms: [android, iphone, ipad, macos]
+    parameters:
+      - name: contentInsets
+        summary: |
+            Dictionary with `top`, `left`, `bottom` and `right` properties specifying the inset 
+            from the corresponding edges of the scroll view.
+        type: Padding
+      - name: animated
+        summary: |
+            A JS object with an `animated` property which determines whether the scrollable region inset should be animated.
+
+            Note that the default here is equivalent to passing in `{ animated: false }`
+        type: AnimatedOptions
+        optional: true
+        default: "{ animated: false }"
 
   - name: setZoomScale
     summary: Sets the value of the [zoomScale](Titanium.UI.ScrollView.zoomScale) property.
@@ -265,6 +303,25 @@ properties:
         in percentages, are not. The minimum value for contentWidth is the width of the scroll view.
         Measured in platform-specific units; pixels on Android, effective pixels on Windows and density-independent pixels (dip) on iOS.
     type: [Number, String]
+
+  - name: contentInsets
+    summary: The distance that the scroll view's content is inset from its edges.
+    description: |
+        Content insets are expressed as a dictionary with `top`, `right`, `bottom`, and `left` 
+        properties that specify the distance, in pixels, that the content view is inset from 
+        the corresponding edges of the scroll view. 
+
+        For example: `{top: 64, left: 0, bottom: 0, right: 0}` insets the top of the scrollable 
+        area by 64 pixels.
+
+        Use the [setContentInsets](Titanium.UI.ScrollView.setContentInsets) method to animate 
+        the change, or use this property to make the change without animation.
+        
+        Note: The correct property name is `contentInsets` (plural). The native iOS API uses
+        `contentInset` (singular), but Titanium's JavaScript API uses `contentInsets`. Using the
+        singular form in TypeScript (e.g. `scrollView.contentInset`) will cause a type error.
+    type: Padding
+    platforms: [android, iphone, ipad, macos]
 
   - name: decelerationRate
     summary: The deceleration rate of the ScrollView.
@@ -527,4 +584,23 @@ examples:
                 </ScrollView>
             </Window>
         </Alloy>
+        ```
+
+  - title: Reading and Setting Content Insets
+    example: |
+        Read the current content insets and set new insets with animation.
+
+        ``` js
+        const win = Ti.UI.createWindow();
+        const scrollView = Ti.UI.createScrollView({ layout: 'vertical' });
+
+        // Read current insets (Padding: { top, left, bottom, right })
+        const current = scrollView.contentInsets;
+        Ti.API.info('Current insets: ' + JSON.stringify(current));
+
+        // Set new insets with animation
+        scrollView.setContentInsets({ top: 80, left: 0, right: 0, bottom: 0 }, { animated: true });
+
+        win.add(scrollView);
+        win.open();
         ```

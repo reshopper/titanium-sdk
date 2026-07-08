@@ -33,6 +33,74 @@ describe('Titanium.UI.NavigationWindow', function () {
 			should(view).have.readOnlyProperty('apiName').which.is.a.String();
 			should(view.apiName).be.eql('Ti.UI.NavigationWindow');
 		});
+
+		describe('.windows', () => {
+			it('is an Array', () => {
+				const rootWindow = Ti.UI.createWindow();
+				nav = Ti.UI.createNavigationWindow({ window: rootWindow });
+				should(nav.windows).be.an.Array();
+			});
+
+			it('contains root window after open', function (finish) {
+				const rootWindow = Ti.UI.createWindow();
+				nav = Ti.UI.createNavigationWindow({ window: rootWindow });
+
+				rootWindow.addEventListener('open', function open() {
+					rootWindow.removeEventListener('open', open);
+					try {
+						should(nav.windows).be.an.Array();
+						should(nav.windows.length).eql(1);
+						should(nav.windows[0]).eql(rootWindow);
+					} catch (err) {
+						return finish(err);
+					}
+					finish();
+				});
+
+				nav.open();
+			});
+
+			it('updates when windows are opened and closed', function (finish) {
+				const rootWindow = Ti.UI.createWindow();
+				const subWindow = Ti.UI.createWindow();
+				nav = Ti.UI.createNavigationWindow({ window: rootWindow });
+
+				rootWindow.addEventListener('open', function open() {
+					rootWindow.removeEventListener('open', open);
+					try {
+						should(nav.windows.length).eql(1);
+					} catch (err) {
+						return finish(err);
+					}
+					setTimeout(() => nav.openWindow(subWindow), 1);
+				});
+
+				subWindow.addEventListener('open', function open() {
+					subWindow.removeEventListener('open', open);
+					try {
+						should(nav.windows.length).eql(2);
+						should(nav.windows[0]).eql(rootWindow);
+						should(nav.windows[1]).eql(subWindow);
+					} catch (err) {
+						return finish(err);
+					}
+					setTimeout(() => nav.closeWindow(subWindow), 1);
+				});
+
+				subWindow.addEventListener('close', function close() {
+					subWindow.removeEventListener('close', close);
+					try {
+						should(nav.windows.length).eql(1);
+						should(nav.windows[0]).eql(rootWindow);
+					} catch (err) {
+						return finish(err);
+					}
+					finish();
+				});
+
+				nav.open();
+			});
+		});
 	});
 
 	describe('methods', () => {
@@ -186,6 +254,170 @@ describe('Titanium.UI.NavigationWindow', function () {
 				subWindow.addEventListener('open', function open() {
 					subWindow.removeEventListener('open', open);
 					setTimeout(() => nav.popToRootWindow(), 1);
+				});
+
+				nav.open();
+			});
+		});
+
+		describe('#insertWindow()', () => {
+			it.ios('is a Function', () => {
+				const view = Ti.UI.createNavigationWindow();
+				should(view.insertWindow).be.a.Function();
+			});
+
+			it.ios('returns a Promise', function (finish) {
+				const rootWindow = Ti.UI.createWindow({ title: 'Root' });
+				const insertedWindow = Ti.UI.createWindow({ title: 'Inserted' });
+
+				nav = Ti.UI.createNavigationWindow({
+					window: rootWindow
+				});
+
+				rootWindow.addEventListener('open', function open() {
+					rootWindow.removeEventListener('open', open);
+					setTimeout(() => {
+						const result = nav.insertWindow(insertedWindow, 1);
+						try {
+							result.should.be.a.Promise();
+							result.then(() => finish()).catch(e => finish(e));
+						} catch (err) {
+							finish(err);
+						}
+					}, 1);
+				});
+
+				nav.open();
+			});
+
+			it.ios('inserts window at specified index', function (finish) {
+				const rootWindow = Ti.UI.createWindow({ title: 'Root' });
+				const insertedWindow = Ti.UI.createWindow({ title: 'Inserted' });
+				const topWindow = Ti.UI.createWindow({ title: 'Top' });
+
+				nav = Ti.UI.createNavigationWindow({
+					window: rootWindow
+				});
+
+				rootWindow.addEventListener('open', function open() {
+					rootWindow.removeEventListener('open', open);
+					setTimeout(() => {
+						// Open top window first
+						nav.openWindow(topWindow, { animated: false });
+					}, 1);
+				});
+
+				topWindow.addEventListener('open', function open() {
+					topWindow.removeEventListener('open', open);
+					setTimeout(() => {
+						// Insert a window between root and top, then close top
+						// Use Promise to ensure proper sequencing
+						nav.insertWindow(insertedWindow, 1)
+							.then(() => nav.closeWindow(topWindow, { animated: false }))
+							.catch(e => finish(e));
+					}, 1);
+				});
+
+				insertedWindow.addEventListener('focus', function focus() {
+					insertedWindow.removeEventListener('focus', focus);
+					try {
+						// Verify the inserted window is now visible and in the stack
+						should(insertedWindow.navigationWindow).eql(nav);
+					} catch (err) {
+						return finish(err);
+					}
+					finish();
+				});
+
+				nav.open();
+			});
+
+			it.ios('allows deep linking scenario - start at detail level with back navigation', function (finish) {
+				const rootWindow = Ti.UI.createWindow({ title: 'Home' });
+				const categoryWindow = Ti.UI.createWindow({ title: 'Category' });
+				const detailWindow = Ti.UI.createWindow({ title: 'Detail' });
+
+				nav = Ti.UI.createNavigationWindow({
+					window: rootWindow
+				});
+
+				rootWindow.addEventListener('open', function open() {
+					rootWindow.removeEventListener('open', open);
+					setTimeout(() => {
+						// Simulate deep link: insert category, then open detail
+						// Use Promise to ensure proper sequencing
+						nav.insertWindow(categoryWindow, 1)
+							.then(() => nav.openWindow(detailWindow, { animated: false }))
+							.catch(e => finish(e));
+					}, 1);
+				});
+
+				detailWindow.addEventListener('open', function open() {
+					detailWindow.removeEventListener('open', open);
+					setTimeout(() => {
+						try {
+							// Verify all windows are in the navigation stack
+							should(rootWindow.navigationWindow).eql(nav);
+							should(categoryWindow.navigationWindow).eql(nav);
+							should(detailWindow.navigationWindow).eql(nav);
+
+							// Close detail window to test back navigation
+							nav.closeWindow(detailWindow, { animated: false });
+						} catch (err) {
+							return finish(err);
+						}
+					}, 100);
+				});
+
+				categoryWindow.addEventListener('focus', function focus() {
+					categoryWindow.removeEventListener('focus', focus);
+					try {
+						// Category window should now be visible after closing detail
+						should(categoryWindow.navigationWindow).eql(nav);
+					} catch (err) {
+						return finish(err);
+					}
+					finish();
+				});
+
+				nav.open();
+			});
+
+			it.ios('insert then close works correctly with Promise', function (finish) {
+				const rootWindow = Ti.UI.createWindow({ title: 'Root' });
+				const currentWindow = Ti.UI.createWindow({ title: 'Current' });
+				const insertedWindow = Ti.UI.createWindow({ title: 'Inserted' });
+
+				nav = Ti.UI.createNavigationWindow({
+					window: rootWindow
+				});
+
+				rootWindow.addEventListener('open', function open() {
+					rootWindow.removeEventListener('open', open);
+					setTimeout(() => nav.openWindow(currentWindow, { animated: false }), 1);
+				});
+
+				currentWindow.addEventListener('open', function open() {
+					currentWindow.removeEventListener('open', open);
+					setTimeout(() => {
+						// This is the critical test: insert then close using Promise
+						nav.insertWindow(insertedWindow, 1)
+							.then(() => nav.closeWindow(currentWindow, { animated: false }))
+							.catch(e => finish(e));
+					}, 1);
+				});
+
+				insertedWindow.addEventListener('focus', function focus() {
+					insertedWindow.removeEventListener('focus', focus);
+					try {
+						// Inserted window should now be visible
+						should(insertedWindow.navigationWindow).eql(nav);
+						// Current window should be closed
+						should(currentWindow.navigationWindow).not.be.ok();
+					} catch (err) {
+						return finish(err);
+					}
+					finish();
 				});
 
 				nav.open();

@@ -1,0 +1,177 @@
+---
+name: Global.Intl.RelativeTimeFormat
+summary: Immutable object used to generate localized relative time strings.
+description: |
+    A relative time format object provides localized formatting of relative time values
+    such as "3 days ago", "in 2 hours", or "yesterday".
+
+    For more detail, see the MDN website about
+    [Intl.RelativeTimeFormat](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Intl/RelativeTimeFormat).
+
+    Note: The `formatToParts()` method is not currently supported on Android.
+
+examples:
+  - title: Relative Time Formatting
+    example: |
+        ``` js
+        const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+        console.log(rtf.format(-1, 'day'));     // "yesterday"
+        console.log(rtf.format(0, 'day'));      // "today"
+        console.log(rtf.format(1, 'day'));      // "tomorrow"
+        console.log(rtf.format(-3, 'month'));   // "3 months ago"
+        ```
+
+  - title: Numeric Relative Time
+    example: |
+        ``` js
+        const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'always' });
+        console.log(rtf.format(-1, 'day'));     // "1 day ago"
+        console.log(rtf.format(1, 'day'));      // "in 1 day"
+        console.log(rtf.format(-3, 'hour'));    // "3 hours ago"
+        ```
+
+  - title: Different Styles
+    example: |
+        ``` js
+        const long = new Intl.RelativeTimeFormat('en', { style: 'long' });
+        console.log(long.format(-1, 'month'));   // "1 month ago"
+
+        const short = new Intl.RelativeTimeFormat('en', { style: 'short' });
+        console.log(short.format(-1, 'month'));  // "1 mo. ago"
+
+        const narrow = new Intl.RelativeTimeFormat('en', { style: 'narrow' });
+        console.log(narrow.format(-1, 'month')); // "1 mo. ago"
+        ```
+
+platforms: [iphone, ipad, android, macos]
+since: {iphone: "6.0.0", ipad: "6.0.0", android: "12.7.0", macos: "9.2.0"}
+osver: {android: {min: "10.0"}, ios: {min: "14.0"}}
+
+methods:
+  - name: format
+    summary: Formats a relative time value into a localized string.
+    description: |
+        Generates a localized string representing the given value and unit relative to the current time.
+        For example, `format(-1, 'day')` might return `"1 day ago"` or `"yesterday"` depending on the
+        `numeric` option.
+    parameters:
+      - name: value
+        summary: |
+            A numeric value to use for the relative time. Negative values indicate the past
+            and positive values indicate the future.
+        type: Number
+      - name: unit
+        summary: |
+            The unit to use for the relative time formatting.
+            Can be `"year"`, `"quarter"`, `"month"`, `"week"`, `"day"`, `"hour"`, `"minute"`, or `"second"`.
+            Plural forms such as `"years"`, `"days"`, etc. are also accepted.
+        type: String
+    returns:
+        type: String
+        summary: A localized relative time string.
+
+  - name: resolvedOptions
+    summary: Gets the object's formatting options.
+    description: |
+        Returns the options the relative time format object uses.
+
+        For more detail, see the MDN website about
+        [resolvedOptions](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Intl/RelativeTimeFormat/resolvedOptions).
+    returns:
+        type: RelativeTimeFormatResolvedOptions
+        summary: Returns the formatting options used.
+
+  - name: supportedLocalesOf
+    summary: Static method indicating what locales are supported from the given locale(s).
+    description: |
+        For more detail, see the MDN website about
+        [supportedLocalesOf](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Intl/RelativeTimeFormat/supportedLocalesOf).
+    parameters:
+      - name: locales
+        summary: A string or array of strings providing BCP 47 locale identifiers to query.
+        type: [String, Array<String>]
+    returns:
+        type: Array<String>
+        summary: Array containing a subset of the given locale strings that are supported.
+
+properties:
+  - name: constructor
+    summary: Creates a new `Intl.RelativeTimeFormat` object with the given locale and options.
+    description: |
+        #### Syntax
+
+        ``` js
+        new Intl.RelativeTimeFormat([locales[, options]])
+        ```
+
+        #### Parameters
+
+        *    `locales`: [String](Global.String)/[String](Global.String)`[]` (optional)
+
+             The [BCP 47](https://www.unicode.org/reports/tr35/tr35.html#BCP_47_Conformance) language and country
+             code(s) to use for localized formatting. Can provide multiple locales where the best-supported
+             locale will be favored in the order provided by the array. If parameter is not assigned, then
+             the system's current locale will be used.
+
+        *    `options`: <RelativeTimeFormatOptions> (optional)
+
+             Provides settings for the relative time formatting.
+
+    type: Global.Intl.RelativeTimeFormat
+    permission: read-only
+
+---
+name: RelativeTimeFormatOptions
+summary: Options to be passed into the <Global.Intl.RelativeTimeFormat.constructor> method.
+platforms: [iphone, ipad, android, macos]
+since: {iphone: "6.0.0", ipad: "6.0.0", android: "12.7.0", macos: "9.2.0"}
+osver: {android: {min: "10.0"}, ios: {min: "14.0"}}
+properties:
+  - name: localeMatcher
+    type: String
+    default: "best fit"
+    summary: The locale matching algorithm to use.
+    description: |
+        Can be set to `"lookup"` or `"best fit"`.
+
+        This option is ignored on Android.
+    exclude-platforms: [android]
+
+  - name: numeric
+    type: String
+    default: "always"
+    summary: Determines whether to use numeric values in the output.
+    description: |
+        Can be set to:
+        - `"always"`: Always use numeric values (e.g., "1 day ago").
+        - `"auto"`: May use more idiomatic phrasing (e.g., "yesterday" instead of "1 day ago").
+
+  - name: style
+    type: String
+    default: "long"
+    summary: The length of the formatted relative time message.
+    description: |
+        Can be set to `"long"`, `"short"`, or `"narrow"`.
+
+---
+name: RelativeTimeFormatResolvedOptions
+summary: Resolved options returned by <Global.Intl.RelativeTimeFormat.resolvedOptions>.
+platforms: [iphone, ipad, android, macos]
+since: {iphone: "6.0.0", ipad: "6.0.0", android: "12.7.0", macos: "9.2.0"}
+osver: {android: {min: "10.0"}, ios: {min: "14.0"}}
+properties:
+  - name: locale
+    type: String
+    summary: The BCP 47 language tag for the locale actually used.
+
+  - name: style
+    type: String
+    summary: The length of the formatted relative time message.
+
+  - name: numeric
+    type: String
+    summary: Whether numeric values are used in the output.
+
+  - name: numberingSystem
+    type: String
+    summary: The numbering system used.

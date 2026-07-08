@@ -490,6 +490,25 @@ excludes:
     methods: [removeAllChildren]
 
 methods:
+  - name: measureActualDimensions
+    summary: Measures the window content size without opening the window.
+    description: |
+        Computes the natural size of the window's content using the layout engine. Works pre-open.
+        Supports the same options as `Ti.UI.View.measure()` including min/max and retry controls.
+    parameters:
+      - name: options
+        type: Dictionary
+        optional: true
+        summary: Constraints and retry options (width/height, maxWidth/maxHeight, minWidth/minHeight, maxFrames, timeoutMs)
+      - name: callback
+        type: Callback<Object>
+        optional: true
+        summary: Optional callback. Prefer the returned Promise.
+    returns:
+      summary: Promise resolving to `{ width, height }` in default units.
+      type: Promise<Dimension>
+    since: "12.9.0"
+    platforms: [android, iphone, ipad, macos]
   - name: addSharedElement
     summary: Adds a common UI element to participate in window transition animation.
     description: |
@@ -719,6 +738,13 @@ events:
 
   - name: close
     summary: Fired when the window is closed.
+
+  - name: willClose
+    summary: Fired when the window is about to close.
+    description: |
+        This event is fired before the window actually closes, allowing you to perform
+        cleanup or prepare for the close. It fires before the `close` event. The close
+        cannot be cancelled; this is a notification only.
 
   - name: focus
     summary: Fired when the window gains focus.

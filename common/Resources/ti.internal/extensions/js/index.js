@@ -1,5 +1,6 @@
 // Load all JavaScript extensions/polyfills
 import Console from './console';
+import './Array';
 import './Date';
 import './Error';
 import './Intl';

@@ -878,6 +878,71 @@ describe('Titanium.UI.Window', function () {
 			});
 			win.open();
 		});
+
+		it('willClose event is fired', function (finish) {
+			this.slow(5000);
+
+			win = Ti.UI.createWindow({
+				backgroundColor: 'pink'
+			});
+			win.addEventListener('willClose', function listener () {
+				if (win) {
+					win.removeEventListener('willClose', listener);
+				}
+				finish();
+			});
+			win.addEventListener('open', () => win.close());
+			win.open();
+		});
+
+		it('willClose fires before close', function (finish) {
+			this.slow(5000);
+
+			win = Ti.UI.createWindow({
+				backgroundColor: 'pink'
+			});
+			const order = [];
+			win.addEventListener('willClose', function willCloseListener () {
+				order.push('willClose');
+				win.removeEventListener('willClose', willCloseListener);
+			});
+			win.addEventListener('close', function closeListener () {
+				order.push('close');
+				win.removeEventListener('close', closeListener);
+				try {
+					should(order).eql([ 'willClose', 'close' ]);
+				} catch (e) {
+					return finish(e);
+				}
+				finish();
+			});
+			win.addEventListener('open', () => win.close());
+			win.open();
+		});
+
+		it('willClose fires only once per close', function (finish) {
+			this.slow(5000);
+
+			win = Ti.UI.createWindow({
+				backgroundColor: 'pink'
+			});
+			let willCloseCount = 0;
+			win.addEventListener('willClose', function listener () {
+				willCloseCount += 1;
+				win.removeEventListener('willClose', listener);
+			});
+			win.addEventListener('close', function closeListener () {
+				win.removeEventListener('close', closeListener);
+				try {
+					should(willCloseCount).eql(1);
+				} catch (e) {
+					return finish(e);
+				}
+				finish();
+			});
+			win.addEventListener('open', () => win.close());
+			win.open();
+		});
 	});
 
 	// For this test, you should see errors in the console, it is expected.

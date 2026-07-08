@@ -81,19 +81,16 @@ if (!isIOS13Plus && !isMACOSXCatalinaPlus) {
 
 		try {
 			if (OS_ANDROID) {
-				// On Android, use custom string references to be handled by "TiColorHelper.java".
+				// On Android, construct a dynamic color via new ColorProxy using AndroidModule.parseColor
 				if (colorset[colorName]) {
-					// Add all theme colors to a single string.
-					// Example: "ti.semantic.color:dark=<ColorString>;light=<ColorString>"
-					const colorArray = [];
-					for (const colorType in colorset[colorName]) {
-						const colorObj = Color.fromSemanticColorsEntry(colorset[colorName][colorType]);
-						colorArray.push(`${colorType}=${colorObj.toRGBAString()}`);
-					}
-					return 'ti.semantic.color:' + colorArray.join(';');
+					const entry = colorset[colorName][UI.semanticColorType];
+					const colorObj = Color.fromSemanticColorsEntry(entry);
+					// Normalize to Android ARGB hex for parsing
+					const hex = colorObj.toARGBHexString();
+					return Ti.UI.Android.parseColor(hex);
 				} else if (Ti.Android.R.color[colorName]) {
-					// We're referencing a native "res" color entry.
-					return `@color/${colorName}`;
+					// native res color -> convert to proxy as well
+					return Ti.UI.Android.getColorResource(`@color/${colorName}`);
 				}
 			} else if (colorset[colorName]) {
 				// Return the raw color string value from the "semantic.colors.json".

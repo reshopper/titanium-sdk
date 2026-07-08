@@ -274,6 +274,57 @@ describe('Titanium.Network.HTTPClient', function () {
 		xhr.send();
 	});
 
+	it('openResetsHeaders', function (finish) {
+		const xhr = Ti.Network.createHTTPClient({
+			timeout: 3e4
+		});
+		let requestCount = 0;
+		xhr.onload = function (e) {
+			should(e.code).eql(0);
+			if (xhr.status === 200) {
+				should(e.success).be.true();
+				const response = JSON.parse(xhr.responseText).headers;
+
+				if (requestCount === 0) {
+					// First request should have both headers
+					should(response).have.property('First-Header');
+					should(response).have.property('Second-Header');
+					response['First-Header'].should.eql('first-value');
+					response['Second-Header'].should.eql('second-value');
+
+					// Call open() again - this should reset headers
+					requestCount++;
+					xhr.open('GET', 'https://httpbin.org/headers');
+					// Only set one header this time - previous headers should be cleared
+					xhr.setRequestHeader('Third-Header', 'third-value');
+					xhr.send();
+				} else {
+					// Second request should only have the new header, not the old ones
+					should(response).have.property('Third-Header');
+					response['Third-Header'].should.eql('third-value');
+					should(response).not.have.property('First-Header');
+					should(response).not.have.property('Second-Header');
+					finish();
+				}
+			} else if (xhr.status !== 503) { // service unavailable (over quota)
+				return finish(new Error(`Received unexpected response: ${xhr.status}`));
+			} else {
+				finish();
+			}
+		};
+		xhr.onerror = function () {
+			if (xhr.status !== 503) { // service unavailable (over quota)
+				return finish(new Error(`Received unexpected response: ${xhr.status}`));
+			}
+			finish();
+		};
+		// First request with two headers
+		xhr.open('GET', 'https://httpbin.org/headers');
+		xhr.setRequestHeader('First-Header', 'first-value');
+		xhr.setRequestHeader('Second-Header', 'second-value');
+		xhr.send();
+	});
+
 	it('sendData', function (finish) {
 		const xhr = Ti.Network.createHTTPClient({
 			timeout: 3e4

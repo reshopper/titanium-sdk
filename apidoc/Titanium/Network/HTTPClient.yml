@@ -181,6 +181,19 @@ methods:
         type: String
     platforms: [android, iphone, ipad, macos]
 
+  - name: getAllRequestHeaders
+    summary: All of the request headers.
+    description: |
+        Returns all request headers that have been set using [setRequestHeader](Titanium.Network.HTTPClient.setRequestHeader).
+        
+        Contains a single string with all headers in the format "Header-Name:Header-Value" separated by newlines,
+        or an empty string if no headers have been set.
+
+        See also: [setRequestHeader](Titanium.Network.HTTPClient.setRequestHeader).
+    returns:
+        type: String
+    since: {iphone: "13.0.0", ipad: "13.0.0", macos: "13.0.0", android: "13.0.0"}
+
   - name: getAllResponseHeaders
     summary: All of the response headers.
     description: |
@@ -204,6 +217,12 @@ methods:
 
   - name: open
     summary: Opens the request and prepares the connection.
+    description: |
+        Opens a new HTTP request. Calling `open()` resets the request state, including all previously set request headers.
+        This ensures that each call to `open()` starts with a clean state, matching the XMLHttpRequest specification.
+        
+        To reuse an HTTPClient object for multiple requests, call `open()` again with new parameters. All request headers
+        set via [setRequestHeader](Titanium.Network.HTTPClient.setRequestHeader) will be cleared and must be set again.
     parameters:
       - name: method
         summary: HTTP method for this request, such as 'GET' or 'POST'. 'PATCH' is available on Android from SDK 4.1.0.
@@ -258,15 +277,20 @@ methods:
   - name: setRequestHeader
     summary: |
         Sets the value for the specified request header. Must be called after `open` but before `send`.
+        To remove a previously set header, pass `null` as the value.
+    description: |
+        Sets or removes a request header. If `value` is `null`, the header will be removed from the request.
+        This allows you to remove headers that were previously set, or to clear default headers.
+        
+        Note: There is no separate `removeRequestHeader` method. Use `setRequestHeader(name, null)` instead.
     parameters:
       - name: name
-        summary: Name of the header to set.
+        summary: Name of the header to set or remove.
         type: String
 
       - name: value
         summary: |
-            Value to assign to the header. May be `null` to clear a default header value, such as
-            X-Requested-With.
+            Value to assign to the header. Pass `null` to remove the header from the request.
         type: String
 
   - name: setTimeout
@@ -637,6 +661,58 @@ examples:
         client.open("GET", url);
         // Send the request.
         client.send();
+        ```
+
+  - title: Retrying Request with Modified Headers
+    example: |
+        The following example shows how to retry a request with modified headers. When `open()` is called again,
+        all previous request headers are cleared, allowing you to set new headers for the retry.
+
+        ``` js
+        const xhr = Ti.Network.createHTTPClient({
+            timeout: 30000
+        });
+
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        xhr.onload = function(e) {
+            if (xhr.status === 200) {
+                Ti.API.info('Request successful!');
+                // Handle success
+            } else if (xhr.status === 304) {
+                // Cache is invalid, retry without cache headers
+                retryWithoutCache();
+            }
+        };
+
+        xhr.onerror = function(e) {
+            if (retryCount < maxRetries) {
+                retryWithoutCache();
+            } else {
+                Ti.API.error('Max retries reached');
+            }
+        };
+
+        function retryWithoutCache() {
+            retryCount++;
+            
+            // Call open() again - this resets all headers
+            xhr.open('GET', 'https://api.example.com/data');
+            
+            // Set new headers (previous headers are cleared)
+            xhr.setRequestHeader('Cache-Control', 'no-cache');
+            xhr.setRequestHeader('X-Retry-Count', retryCount.toString());
+            
+            // Send request again
+            xhr.send();
+        }
+
+        // First request with cache headers
+        xhr.open('GET', 'https://api.example.com/data');
+        xhr.setRequestHeader('If-None-Match', cachedETag);
+        xhr.setRequestHeader('If-Modified-Since', cachedLastModified);
+        xhr.send();
         ```
 
 ---

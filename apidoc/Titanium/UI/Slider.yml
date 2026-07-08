@@ -93,6 +93,57 @@ examples:
         $.window.open();
         ```
 
+  - title: Slider with Steps (Android)
+    example: |
+        This example demonstrates creating sliders that snap to predefined step values.
+        The slider will automatically snap to the nearest step when the user drags the thumb.
+
+        ``` js
+        // Method 1: Using step count (automatically divides range into equal steps)
+        var slider1 = Ti.UI.createSlider({
+            top: 50,
+            min: 0,
+            max: 100,
+            width: Ti.UI.FILL,
+            value: 50,
+            steps: 5  // Creates 5 equal steps: 0, 25, 50, 75, 100
+        });
+
+        // Method 2: Using array of specific step values
+        var slider2 = Ti.UI.createSlider({
+            top: 120,
+            min: 0,
+            max: 100,
+            width: Ti.UI.FILL,
+            value: 10,
+            steps: [0, 10, 25, 50, 75, 100]  // Custom step values
+        });
+
+        var label1 = Ti.UI.createLabel({
+            text: 'Equal Steps: ' + slider1.value,
+            width: Ti.UI.FILL,
+            top: 30,
+            left: 0,
+            textAlign: Ti.UI.TEXT_ALIGNMENT_CENTER
+        });
+
+        var label2 = Ti.UI.createLabel({
+            text: 'Custom Steps: ' + slider2.value,
+            width: Ti.UI.FILL,
+            top: 100,
+            left: 0,
+            textAlign: Ti.UI.TEXT_ALIGNMENT_CENTER
+        });
+
+        slider1.addEventListener('change', function(e) {
+            label1.text = 'Equal Steps: ' + e.value;
+        });
+
+        slider2.addEventListener('change', function(e) {
+            label2.text = 'Custom Steps: ' + e.value;
+        });
+        ```
+
 methods:
   - name: setValue
     summary: Sets the [value](Titanium.UI.Slider.value) property.
@@ -384,11 +435,73 @@ properties:
     platforms: [iphone, ipad, macos]
 
   - name: splitTrack
-    summary: Separates the thumbImage from the slider track.
+    summary: Determines whether the thumb image is split in half and drawn on top of the track.
+    description: |
+        If this property is `true`, the track is divided into two parts: the parts before and
+        after the position of the slider's thumb. The `leftTrackImage` is displayed to the left
+        of the thumb, and the `rightTrackImage` is displayed to the right of the thumb.
+
+        If this property is `false`, the thumb is drawn on top of the track image.
     type: Boolean
     default: false
-    since: 6.2.0
     platforms: [android]
+    since: "3.2.3"
+
+  - name: steps
+    summary: Array of values that the slider should snap to, or number of equal steps to divide the slider range.
+    description: |
+        When this property is set, the slider will automatically snap to the nearest step value
+        when the user drags the thumb. This provides a discrete selection experience instead
+        of continuous values.
+        
+        **Two ways to use steps:**
+        
+        1. **Array of specific values**: `[0, 25, 50, 75, 100]` - slider snaps to these exact values
+        2. **Step count**: `5` - automatically divides the slider range into 5 equal steps
+        
+        For arrays, values will be automatically sorted internally and should be within the 
+        slider's min/max range.
+        
+        For step count, the value must be greater than 1. The steps will be evenly distributed
+        across the entire slider range from min to max.
+        
+        Examples:
+        - `steps: [0, 10, 25, 50, 100]` - custom step values
+        - `steps: 6` - creates steps at 0, 20, 40, 60, 80, 100 (for min=0, max=100)
+    type: [Array<Number>, Number]
+    platforms: [android, iphone, ipad, macos]
+    since: "12.5.0"
+
+  - name: stepValues
+    summary: When enabled with steps, returns step indices (0, 1, 2...) instead of actual step values.
+    description: |
+        This property only has effect when the `steps` property is also set. When `stepValues` is `true`,
+        the slider will return step indices (0, 1, 2, 3...) instead of the actual step values.
+        
+        This is useful when you want clean integer indices representing which step is selected,
+        regardless of the actual min/max range or step values.
+        
+        **Example:**
+        ```javascript
+        var slider = Ti.UI.createSlider({
+            min: 0,
+            max: 100,
+            steps: 5,          // Creates steps at: 0, 25, 50, 75, 100
+            stepValues: true   // Returns: 0, 1, 2, 3, 4 instead
+        });
+        
+        slider.addEventListener('change', function(e) {
+            // e.value will be 0, 1, 2, 3, or 4
+            console.log('Step index:', e.value);
+        });
+        ```
+        
+        Without `stepValues`, the same slider would return 0, 25, 50, 75, 100.
+        With `stepValues: true`, it returns 0, 1, 2, 3, 4.
+    type: Boolean
+    default: false
+    platforms: [android, iphone, ipad, macos]
+    since: "12.5.0"
 
   - name: thumbImage
     summary: Image for the slider thumb.
@@ -396,8 +509,56 @@ properties:
         The thumb image can be specified as a URL.
 
         Support for using <Titanium.Blob> for this property is only available on iOS.
-    type: [String, Titanium.Blob]
+        
+        On Android, you can also use:
+        - Resource IDs (integers) to reference XML drawable resources
+        - File paths to images in the Resources directory
+        
+        **Example using XML drawable resource:**
+        ```javascript
+        var slider = Ti.UI.createSlider({
+            thumbImage: Ti.Platform.Android.R.drawable.my_custom_thumb
+        });
+        ```
+    type: [String, Titanium.Blob, Number]
     platforms: [android, iphone, ipad, macos]
+
+  - name: thumbSize
+    summary: Custom size for the slider thumb.
+    description: |
+        Allows you to specify custom dimensions for the slider thumb. This is particularly useful
+        when using XML drawable resources or when you want to resize the default thumb.
+        
+        You can specify the size in several ways:
+        - As a number (applies to both width and height)
+        - As an object with `width` and `height` properties
+        
+        **Examples:**
+        ```javascript
+        // Square thumb, 40dp x 40dp
+        var slider = Ti.UI.createSlider({
+            thumbSize: 40
+        });
+        
+        // Custom width and height
+        var slider = Ti.UI.createSlider({
+            thumbSize: {
+                width: 50,
+                height: 30
+            }
+        });
+        
+        // Combined with custom XML drawable
+        var slider = Ti.UI.createSlider({
+            thumbImage: Ti.Platform.Android.R.drawable.my_custom_thumb,
+            thumbSize: 45
+        });
+        ```
+        
+        If no `thumbImage` is specified, a default circular thumb will be created with the specified size.
+    type: [Number, Dictionary]
+    platforms: [android]
+    since: "12.6.0"
 
   - name: tintColor
     summary: The color shown for the portion of the progress bar that is filled.

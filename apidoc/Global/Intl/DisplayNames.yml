@@ -1,0 +1,175 @@
+---
+name: Global.Intl.DisplayNames
+summary: Immutable object used to generate localized display names of languages, regions, scripts, and currencies.
+description: |
+    A display names object provides localized display names for language, region, script,
+    and currency codes.
+
+    For more detail, see the MDN website about
+    [Intl.DisplayNames](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Intl/DisplayNames).
+
+    Note: On Android, the `type` values `"calendar"` and `"dateTimeField"` are not supported
+    and will throw a `RangeError`.
+
+examples:
+  - title: Language Display Names
+    example: |
+        ``` js
+        const languageNames = new Intl.DisplayNames(['en'], { type: 'language' });
+        console.log(languageNames.of('fr'));    // "French"
+        console.log(languageNames.of('de'));    // "German"
+        console.log(languageNames.of('zh'));    // "Chinese"
+        ```
+
+  - title: Region Display Names
+    example: |
+        ``` js
+        const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+        console.log(regionNames.of('US'));    // "United States"
+        console.log(regionNames.of('GB'));    // "United Kingdom"
+        console.log(regionNames.of('DE'));    // "Germany"
+        ```
+
+  - title: Currency Display Names
+    example: |
+        ``` js
+        const currencyNames = new Intl.DisplayNames(['en'], { type: 'currency' });
+        console.log(currencyNames.of('USD'));    // "US Dollar"
+        console.log(currencyNames.of('EUR'));    // "Euro"
+        console.log(currencyNames.of('GBP'));    // "British Pound"
+        ```
+
+platforms: [iphone, ipad, android, macos]
+since: {iphone: "6.0.0", ipad: "6.0.0", android: "12.7.0", macos: "9.2.0"}
+osver: {android: {min: "10.0"}, ios: {min: "14.5"}}
+
+methods:
+  - name: of
+    summary: Returns the localized display name for the given code.
+    description: |
+        The `code` argument is interpreted based on the `type` option provided to the constructor:
+        - `"language"`: A BCP 47 language tag (e.g., `"fr"`, `"en-US"`).
+        - `"region"`: An ISO 3166 region code (e.g., `"US"`, `"GB"`).
+        - `"script"`: An ISO 15924 script code (e.g., `"Latn"`, `"Cyrl"`).
+        - `"currency"`: An ISO 4217 currency code (e.g., `"USD"`, `"EUR"`).
+    parameters:
+      - name: code
+        summary: The code to get the display name for.
+        type: String
+    returns:
+        type: String
+        summary: The localized display name for the given code, or the code itself if no name is available.
+
+  - name: resolvedOptions
+    summary: Gets the object's display name options.
+    description: |
+        Returns the options the display names object uses.
+
+        For more detail, see the MDN website about
+        [resolvedOptions](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Intl/DisplayNames/resolvedOptions).
+    returns:
+        type: DisplayNamesResolvedOptions
+        summary: Returns the display name options used.
+
+  - name: supportedLocalesOf
+    summary: Static method indicating what locales are supported from the given locale(s).
+    description: |
+        For more detail, see the MDN website about
+        [supportedLocalesOf](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Intl/DisplayNames/supportedLocalesOf).
+    parameters:
+      - name: locales
+        summary: A string or array of strings providing BCP 47 locale identifiers to query.
+        type: [String, Array<String>]
+    returns:
+        type: Array<String>
+        summary: Array containing a subset of the given locale strings that are supported.
+
+properties:
+  - name: constructor
+    summary: Creates a new `Intl.DisplayNames` object with the given locale and options.
+    description: |
+        #### Syntax
+
+        ``` js
+        new Intl.DisplayNames(locales, options)
+        ```
+
+        #### Parameters
+
+        *    `locales`: [String](Global.String)/[String](Global.String)`[]`
+
+             The [BCP 47](https://www.unicode.org/reports/tr35/tr35.html#BCP_47_Conformance) language and country
+             code(s) to use for localized display names. Can provide multiple locales where the best-supported
+             locale will be favored in the order provided by the array.
+
+        *    `options`: <DisplayNamesOptions>
+
+             Provides settings for the display names object. The `type` property is required.
+
+    type: Global.Intl.DisplayNames
+    permission: read-only
+
+---
+name: DisplayNamesOptions
+summary: Options to be passed into the <Global.Intl.DisplayNames.constructor> method.
+platforms: [iphone, ipad, android, macos]
+since: {iphone: "6.0.0", ipad: "6.0.0", android: "12.7.0", macos: "9.2.0"}
+osver: {android: {min: "10.0"}, ios: {min: "14.5"}}
+properties:
+  - name: type
+    type: String
+    summary: |
+        The type of display names to return. Required.
+        Can be set to `"language"`, `"region"`, `"script"`, or `"currency"`.
+    description: |
+        Note: On Android, the values `"calendar"` and `"dateTimeField"` are not supported.
+
+  - name: style
+    type: String
+    default: "long"
+    summary: The formatting style to use for display names.
+    description: |
+        Can be set to `"long"`, `"short"`, or `"narrow"`.
+
+  - name: fallback
+    type: String
+    default: "code"
+    summary: The fallback behavior when a display name is not available.
+    description: |
+        Can be set to `"code"` or `"none"`.
+        - `"code"`: Returns the input code as-is.
+        - `"none"`: Returns `undefined`.
+
+  - name: languageDisplay
+    type: String
+    default: "dialect"
+    summary: How language names should be displayed. Only used when `type` is `"language"`.
+    description: |
+        Can be set to `"standard"` or `"dialect"`.
+
+---
+name: DisplayNamesResolvedOptions
+summary: Resolved options returned by <Global.Intl.DisplayNames.resolvedOptions>.
+platforms: [iphone, ipad, android, macos]
+since: {iphone: "6.0.0", ipad: "6.0.0", android: "12.7.0", macos: "9.2.0"}
+osver: {android: {min: "10.0"}, ios: {min: "14.5"}}
+properties:
+  - name: locale
+    type: String
+    summary: The BCP 47 language tag for the locale actually used.
+
+  - name: type
+    type: String
+    summary: The type of display names being returned.
+
+  - name: style
+    type: String
+    summary: The formatting style used.
+
+  - name: fallback
+    type: String
+    summary: The fallback behavior used.
+
+  - name: languageDisplay
+    type: String
+    summary: How language names are displayed. Only present when `type` is `"language"`.

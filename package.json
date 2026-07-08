@@ -2,7 +2,7 @@
   "name": "titanium-mobile",
   "description": "Titanium SDK",
   "type": "module",
-  "version": "13.3.0",
+  "version": "13.6.0",
   "moduleApiVersion": {
     "iphone": "2",
     "android": "4"
@@ -33,6 +33,7 @@
     "cleanbuild": "node ./build/scons cleanbuild",
     "cleanbuild:local": "node ./build/scons cleanbuild -- --skip-zip",
     "cleanbuild:android": "npm run cleanbuild -- android",
+    "cleanbuild:android:local": "npm run cleanbuild:android --skip-zip",
     "cleanbuild:ios": "npm run cleanbuild -- ios",
     "commit": "git-cz",
     "deploy": "node ./build/scons install",
@@ -81,7 +82,10 @@
   "commitlint": {
     "extends": [
       "@commitlint/config-conventional"
-    ]
+    ],
+    "rules": {
+      "body-max-line-length": [0, "always", 100]
+    }
   },
   "config": {
     "commitizen": {
@@ -164,7 +168,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git://github.com/tidev/titanium_mobile.git"
+    "url": "git://github.com/jonasfunk/titanium-sdk.git"
   },
   "vendorDependencies": {
     "node": ">=20.18.1"
