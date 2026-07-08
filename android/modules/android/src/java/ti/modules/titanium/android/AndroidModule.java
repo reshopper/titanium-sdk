@@ -727,6 +727,21 @@ public class AndroidModule extends KrollModule
 				}
 			}
 			Activity currentActivity = TiApplication.getInstance().getCurrentActivity();
+			// Ensure we have a valid Activity to perform the permission request on.
+			// The app may be in the background or transitioning, in which case there is
+			// no current Activity and dereferencing it would throw a NullPointerException.
+			boolean isActivityInvalid = (currentActivity == null)
+				|| currentActivity.isFinishing()
+				|| (Build.VERSION.SDK_INT >= 17 && currentActivity.isDestroyed());
+			if (isActivityInvalid) {
+				KrollDict error = new KrollDict();
+				error.putCodeAndMessage(-1, "No active Activity to request permissions");
+				if (permissionCallback != null) {
+					permissionCallback.callAsync(callbackThisObject, error);
+				}
+				promise.reject(error);
+				return;
+			}
 			List<String> filteredPermissions = new ArrayList<String>();
 			for (String permission : permissions) {
 				if (currentActivity.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
