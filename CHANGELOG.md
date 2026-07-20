@@ -1,3 +1,21 @@
+## [13.7.0](https://github.com/reshopper/titanium-sdk/compare/13.6.0...13.7.0) (2026-07-20)
+
+## About this release
+
+Titanium SDK 13.7.0 is a minor release of the SDK, addressing the two top Android Vitals issues in the media/permission flow.
+
+## Bug Fixes
+
+### Android platform
+
+* **AndroidModule**: guard `requestPermissions` against a null Activity to prevent a `NullPointerException` when the app is backgrounded/transitioning ([5e24a86](https://github.com/reshopper/titanium-sdk/commit/5e24a869dee769ff3c0ac07c544d35960a2bfe20))
+* **Media**: move gallery image decode/EXIF/resize/compress off the main thread to avoid ANRs ([5e24a86](https://github.com/reshopper/titanium-sdk/commit/5e24a869dee769ff3c0ac07c544d35960a2bfe20))
+
+## Community Credits
+
+* jonasfunk
+  * guard `requestPermissions` NPE and move gallery image I/O off the main thread ([5e24a86](https://github.com/reshopper/titanium-sdk/commit/5e24a869dee769ff3c0ac07c544d35960a2bfe20))
+
 ## [13.6.0](https://github.com/jonasfunk/titanium-sdk/compare/13.5.0...13.6.0) (2026-04-23)
 
 ## About this release
