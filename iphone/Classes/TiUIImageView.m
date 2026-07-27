@@ -10,7 +10,7 @@
 #import "TiSymbolEffectManager.h"
 #import "TiUIImageViewProxy.h"
 #import <CommonCrypto/CommonDigest.h>
-#import <TitaniumKit/ImageLoader.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/OperationQueue.h>
 #import <TitaniumKit/TiBase.h>
 #import <TitaniumKit/TiBlob.h>
@@ -350,9 +350,9 @@ DEFINE_EXCEPTIONS
 {
   int position = [TiUtils intValue:pos];
   NSURL *theurl = [TiUtils toURL:[images objectAtIndex:position] proxy:self.proxy];
-  UIImage *theimage = [[ImageLoader sharedLoader] loadImmediateImage:theurl];
+  UIImage *theimage = [[TiImageLoader sharedLoader] loadImmediateImage:theurl];
   if (theimage == nil) {
-    theimage = [[ImageLoader sharedLoader] loadRemote:theurl];
+    theimage = [[TiImageLoader sharedLoader] loadRemote:theurl];
   }
   if (theimage == nil) {
     NSLog(@"[ERROR] couldn't load imageview image: %@ at position: %d", theurl, position);
@@ -453,7 +453,7 @@ DEFINE_EXCEPTIONS
   }
 
   if (defURL != nil) {
-    UIImage *poster = [[ImageLoader sharedLoader] loadImmediateImage:defURL withSize:imageSize];
+    UIImage *poster = [[TiImageLoader sharedLoader] loadImmediateImage:defURL withSize:imageSize];
 
     UIImage *imageToUse = [self rotatedImage:poster];
 
@@ -519,7 +519,7 @@ DEFINE_EXCEPTIONS
       return;
     }
 
-    UIImage *image = [[ImageLoader sharedLoader] loadImmediateImage:img];
+    UIImage *image = [[TiImageLoader sharedLoader] loadImmediateImage:img];
     if (image == nil) {
       [self loadDefaultImage:imageSize];
       placeholderLoading = YES;
@@ -581,7 +581,7 @@ DEFINE_EXCEPTIONS
   } else if ([arg isKindOfClass:[TiFile class]]) {
     TiFile *file = (TiFile *)arg;
     NSURL *fileUrl = [NSURL fileURLWithPath:[file path]];
-    image = [[ImageLoader sharedLoader] loadImmediateImage:fileUrl];
+    image = [[TiImageLoader sharedLoader] loadImmediateImage:fileUrl];
   } else if ([arg isKindOfClass:[UIImage class]]) {
     // called within this class
     image = (UIImage *)arg;
@@ -800,7 +800,7 @@ DEFINE_EXCEPTIONS
   reverse = [TiUtils boolValue:value];
 }
 
-#pragma mark ImageLoader delegates
+#pragma mark TiImageLoader delegates
 
 - (void)imageLoadSuccess:(ImageLoaderRequest *)request image:(UIImage *)image
 {

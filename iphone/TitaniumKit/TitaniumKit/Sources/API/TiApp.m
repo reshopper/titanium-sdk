@@ -6,7 +6,7 @@
  */
 #include <stdio.h>
 
-#import "ImageLoader.h"
+#import "TiImageLoader.h"
 #import "Mimetypes.h"
 #import "NSData+Additions.h"
 #import "TiApp.h"
@@ -1046,7 +1046,7 @@ TI_INLINE void waitForMemoryPanicCleared(void); // WARNING: This must never be r
   [[NSNotificationCenter defaultCenter] postNotificationName:kTiSuspendNotification object:self];
 
   // suspend any image loading
-  [[ImageLoader sharedLoader] suspend];
+  [[TiImageLoader sharedLoader] suspend];
   [kjsBridge gc];
 }
 
@@ -1067,7 +1067,7 @@ TI_INLINE void waitForMemoryPanicCleared(void); // WARNING: This must never be r
   [[NSNotificationCenter defaultCenter] postNotificationName:kTiResumedNotification object:self];
 
   // resume any image loading
-  [[ImageLoader sharedLoader] resume];
+  [[TiImageLoader sharedLoader] resume];
 }
 
 - (void)applicationDidEnterBackground:(UIApplication *)application

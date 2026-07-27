@@ -18,7 +18,7 @@
 #import "TiUIRefreshControlProxy.h"
 #endif
 #import <MobileCoreServices/MobileCoreServices.h>
-#import <TitaniumKit/ImageLoader.h>
+#import <TitaniumKit/TiImageLoader.h>
 
 @interface TiUIListView ()
 @property (nonatomic, readonly) TiUIListViewProxy *listViewProxy;
@@ -1285,7 +1285,7 @@ static TiViewProxy *FindViewProxyWithBindIdContainingPoint(UIView *view, CGPoint
 
     if (image != nil) {
       NSURL *url = [TiUtils toURL:image proxy:(TiProxy *)self.proxy];
-      action.image = [[ImageLoader sharedLoader] loadImmediateImage:url];
+      action.image = [[TiImageLoader sharedLoader] loadImmediateImage:url];
     }
 
     [nativeEditActions addObject:action];
@@ -2168,7 +2168,7 @@ static TiViewProxy *FindViewProxyWithBindIdContainingPoint(UIView *view, CGPoint
 {
 
   if ([self isLazyLoadingEnabled]) {
-    [[ImageLoader sharedLoader] suspend];
+    [[TiImageLoader sharedLoader] suspend];
   }
 
   [self fireScrollStart:(UITableView *)scrollView];
@@ -2210,7 +2210,7 @@ static TiViewProxy *FindViewProxyWithBindIdContainingPoint(UIView *view, CGPoint
 {
   if (!decelerate) {
     if ([self isLazyLoadingEnabled]) {
-      [[ImageLoader sharedLoader] resume];
+      [[TiImageLoader sharedLoader] resume];
     }
     [self fireScrollEnd:(UITableView *)scrollView];
   }
@@ -2230,7 +2230,7 @@ static TiViewProxy *FindViewProxyWithBindIdContainingPoint(UIView *view, CGPoint
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView
 {
   if ([self isLazyLoadingEnabled]) {
-    [[ImageLoader sharedLoader] resume];
+    [[TiImageLoader sharedLoader] resume];
   }
 
   if (isScrollingToTop) {
@@ -2243,7 +2243,7 @@ static TiViewProxy *FindViewProxyWithBindIdContainingPoint(UIView *view, CGPoint
 - (BOOL)scrollViewShouldScrollToTop:(UIScrollView *)scrollView
 {
   if ([self isLazyLoadingEnabled]) {
-    [[ImageLoader sharedLoader] suspend];
+    [[TiImageLoader sharedLoader] suspend];
   }
 
   isScrollingToTop = YES;
@@ -2254,7 +2254,7 @@ static TiViewProxy *FindViewProxyWithBindIdContainingPoint(UIView *view, CGPoint
 - (void)scrollViewDidScrollToTop:(UIScrollView *)scrollView
 {
   if ([self isLazyLoadingEnabled]) {
-    [[ImageLoader sharedLoader] resume];
+    [[TiImageLoader sharedLoader] resume];
   }
 
   [self fireScrollEnd:(UITableView *)scrollView];

@@ -43,7 +43,7 @@
 #import <WebKit/WebKit.h>
 #endif
 
-#import <TitaniumKit/ImageLoader.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiApp.h>
 #import <TitaniumKit/TiColor.h>
 #import <TitaniumKit/TiUtils.h>
@@ -291,7 +291,7 @@ MAKE_SYSTEM_PROP(LIST_ACCESSORY_TYPE_DISCLOSURE, UITableViewCellAccessoryDisclos
 - (void)setBackgroundImage:(id)image
 {
   TiRootViewController *controller = [[TiApp app] controller];
-  UIImage *resultImage = [[ImageLoader sharedLoader] loadImmediateStretchableImage:[TiUtils toURL:image proxy:self]];
+  UIImage *resultImage = [[TiImageLoader sharedLoader] loadImmediateStretchableImage:[TiUtils toURL:image proxy:self]];
   if (resultImage == nil && [image isEqualToString:@"Default.png"]) {
     // special case where we're asking for Default.png and it's in Bundle not path
     resultImage = [UIImage imageNamed:image];

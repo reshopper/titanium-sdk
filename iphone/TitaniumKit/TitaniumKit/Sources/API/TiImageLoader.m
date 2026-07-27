@@ -5,7 +5,7 @@
  * Please see the LICENSE included with this distribution for details.
  */
 
-#import "ImageLoader.h"
+#import "TiImageLoader.h"
 #import "OperationQueue.h"
 #import "TiApp.h"
 #import "TiUtils.h"
@@ -263,7 +263,7 @@
 
 @end
 
-ImageLoader *sharedLoader = nil;
+TiImageLoader *sharedLoader = nil;
 
 @implementation ImageLoaderRequest
 
@@ -314,7 +314,7 @@ DEFINE_EXCEPTIONS
 
 @end
 
-@implementation ImageLoader
+@implementation TiImageLoader
 
 - (id)init
 {
@@ -359,14 +359,14 @@ DEFINE_EXCEPTIONS
 #endif
 }
 
-+ (ImageLoader *)sharedLoader
++ (TiImageLoader *)sharedLoader
 {
   // GCD allows single-dispatch predicates, specifically for situations like singleton initialization.
   // We should be switching to this pattern EVERYWHERE.
 
   static dispatch_once_t pred;
   dispatch_once(&pred, ^{
-    sharedLoader = [[ImageLoader alloc] init];
+    sharedLoader = [[TiImageLoader alloc] init];
   });
   return sharedLoader;
 }

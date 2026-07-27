@@ -7,7 +7,7 @@
 #ifdef USE_TI_UILISTVIEW
 
 #import "TiUIListItem.h"
-#import <TitaniumKit/ImageLoader.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiApp.h>
 #import <TitaniumKit/TiUtils.h>
 #import <TitaniumKit/TiViewProxy.h>
@@ -262,7 +262,7 @@
   }
 
   UIColor *sbgColor = (selectedBackgroundColor != nil) ? ([[TiUtils colorValue:selectedBackgroundColor] _color]) : nil;
-  UIImage *sbgImage = [[ImageLoader sharedLoader] loadImmediateStretchableImage:[TiUtils toURL:selectedBackgroundImage proxy:_proxy] withLeftCap:TiDimensionAuto topCap:TiDimensionAuto];
+  UIImage *sbgImage = [[TiImageLoader sharedLoader] loadImmediateStretchableImage:[TiUtils toURL:selectedBackgroundImage proxy:_proxy] withLeftCap:TiDimensionAuto topCap:TiDimensionAuto];
   if (sbgImage != nil) {
     if ([self.selectedBackgroundView isKindOfClass:[UIImageView class]]) {
       [(UIImageView *)self.selectedBackgroundView setImage:sbgImage];
@@ -372,7 +372,7 @@
   if (IS_NULL_OR_NIL(backgroundImage)) {
     backgroundImage = [_initialValues objectForKey:@"backgroundImage"];
   }
-  UIImage *bgImage = [[ImageLoader sharedLoader] loadImmediateStretchableImage:[TiUtils toURL:backgroundImage proxy:_proxy] withLeftCap:TiDimensionAuto topCap:TiDimensionAuto];
+  UIImage *bgImage = [[TiImageLoader sharedLoader] loadImmediateStretchableImage:[TiUtils toURL:backgroundImage proxy:_proxy] withLeftCap:TiDimensionAuto topCap:TiDimensionAuto];
   if (bgImage != nil) {
     // Set the backgroundView to ImageView and set its backgroundColor to bgColor
     if ([self.backgroundView isKindOfClass:[UIImageView class]]) {
@@ -435,7 +435,7 @@
       id imageValue = [properties objectForKey:@"image"];
       if ([self shouldUpdateValue:imageValue forKeyPath:@"imageView.image"]) {
         NSURL *imageUrl = [TiUtils toURL:imageValue proxy:_proxy];
-        UIImage *image = [[ImageLoader sharedLoader] loadImmediateImage:imageUrl];
+        UIImage *image = [[TiImageLoader sharedLoader] loadImmediateImage:imageUrl];
         if (image != nil) {
           [self recordChangeValue:imageValue
                        forKeyPath:@"imageView.image"

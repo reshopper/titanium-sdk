@@ -5,7 +5,7 @@
  * Please see the LICENSE included with this distribution for details.
  */
 #import "TiUIView.h"
-#import "ImageLoader.h"
+#import "TiImageLoader.h"
 #import "Ti2DMatrix.h"
 #import "Ti3DMatrix.h"
 #import "TiApp.h"

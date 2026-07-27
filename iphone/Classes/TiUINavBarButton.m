@@ -10,7 +10,7 @@
 #import "TiButtonUtil.h"
 #import "TiUIButton.h"
 #import "TiUIButtonProxy.h"
-#import <TitaniumKit/ImageLoader.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiBlob.h>
 #import <TitaniumKit/TiUIView.h>
 #import <TitaniumKit/TiUtils.h>
@@ -120,7 +120,7 @@ DEFINE_EXCEPTIONS
         nativeImage = [(TiBlob *)image image];
       } else {
         NSURL *url = [TiUtils toURL:image proxy:proxy_];
-        nativeImage = [[ImageLoader sharedLoader] loadImmediateStretchableImage:url];
+        nativeImage = [[TiImageLoader sharedLoader] loadImmediateStretchableImage:url];
       }
       self = [super initWithImage:nativeImage style:[self style:proxy_] target:self action:@selector(clicked:)];
     } else {

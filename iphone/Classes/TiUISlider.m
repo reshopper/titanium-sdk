@@ -8,7 +8,7 @@
 
 #import "TiUISlider.h"
 #import "TiUISliderProxy.h"
-#import <TitaniumKit/ImageLoader.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiUtils.h>
 
 @implementation TiUISlider
@@ -92,7 +92,7 @@
     return;
   }
 
-  UIImage *ret = [[ImageLoader sharedLoader] loadImmediateStretchableImage:url withLeftCap:rightTrackLeftCap topCap:rightTrackTopCap];
+  UIImage *ret = [[TiImageLoader sharedLoader] loadImmediateStretchableImage:url withLeftCap:rightTrackLeftCap topCap:rightTrackTopCap];
 
   [[self sliderView] setMaximumTrackImage:ret forState:state];
 }
@@ -105,7 +105,7 @@
     return;
   }
 
-  UIImage *ret = [[ImageLoader sharedLoader] loadImmediateStretchableImage:url withLeftCap:leftTrackLeftCap topCap:leftTrackTopCap];
+  UIImage *ret = [[TiImageLoader sharedLoader] loadImmediateStretchableImage:url withLeftCap:leftTrackLeftCap topCap:leftTrackTopCap];
 
   [[self sliderView] setMinimumTrackImage:ret forState:state];
 }

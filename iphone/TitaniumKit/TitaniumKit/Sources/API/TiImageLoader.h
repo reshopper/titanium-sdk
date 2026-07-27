@@ -115,13 +115,13 @@ typedef enum {
 @end
 
 /**
- The ImageLoader class provides a centralized point for loading images in Titanium.
- Using ImageLoader is the preferred way for getting images from remote sources.
+ The TiImageLoader class provides a centralized point for loading images in Titanium.
+ Using TiImageLoader is the preferred way for getting images from remote sources.
 
  The class is singleton and not supposed to be subclassed.
  The instance should not be instantiated directly, but lazily created with <sharedLoader>.
  */
-@interface ImageLoader : NSObject <NSCacheDelegate, APSHTTPRequestDelegate> {
+@interface TiImageLoader : NSObject <NSCacheDelegate, APSHTTPRequestDelegate> {
   @private
   NSCache *cache;
   NSOperationQueue *queue;
@@ -133,7 +133,7 @@ typedef enum {
  Returns the shared instance of image loader.
  @return The shared instance.
  */
-+ (ImageLoader *)sharedLoader;
++ (TiImageLoader *)sharedLoader;
 
 /**
  Tells the loader to load remote image from URL.
