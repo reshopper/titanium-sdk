@@ -7,7 +7,7 @@
 #import <CommonCrypto/CommonDigest.h>
 #import <QuartzCore/QuartzCore.h>
 
-#import "ImageLoader.h"
+#import "TiImageLoader.h"
 #import "TiApp.h"
 #import "TiBase.h"
 #import "TiBlob.h"
@@ -682,7 +682,7 @@ static NSDictionary *sizeMap = nil;
   }
 
   NSURL *urlAttempt = [self toURL:object proxy:proxy];
-  UIImage *image = [[ImageLoader sharedLoader] loadImmediateImage:urlAttempt withSize:imageSize];
+  UIImage *image = [[TiImageLoader sharedLoader] loadImmediateImage:urlAttempt withSize:imageSize];
   return image;
   // Note: If URL is a nonimmediate image, this returns nil.
 }
@@ -700,7 +700,7 @@ static NSDictionary *sizeMap = nil;
   }
 
   NSURL *urlAttempt = [self toURL:object proxy:proxy];
-  UIImage *image = [[ImageLoader sharedLoader] loadImmediateImage:urlAttempt];
+  UIImage *image = [[TiImageLoader sharedLoader] loadImmediateImage:urlAttempt];
   return image;
   // Note: If URL is a nonimmediate image, this returns nil.
 }
@@ -972,7 +972,7 @@ If the new path starts with / and the base URL is app://..., we have to massage 
 
 + (UIImage *)stretchableImage:(id)object proxy:(TiProxy *)proxy
 {
-  return [[ImageLoader sharedLoader] loadImmediateStretchableImage:[self toURL:object proxy:proxy]];
+  return [[TiImageLoader sharedLoader] loadImmediateStretchableImage:[self toURL:object proxy:proxy]];
 }
 
 + (UIImage *)image:(id)object proxy:(TiProxy *)proxy
@@ -980,7 +980,7 @@ If the new path starts with / and the base URL is app://..., we have to massage 
   if ([object isKindOfClass:[TiBlob class]]) {
     return [(TiBlob *)object image];
   } else if ([object isKindOfClass:[NSString class]]) {
-    return [[ImageLoader sharedLoader] loadImmediateImage:[self toURL:object proxy:proxy]];
+    return [[TiImageLoader sharedLoader] loadImmediateImage:[self toURL:object proxy:proxy]];
   }
 
   return nil;
@@ -2049,9 +2049,9 @@ If the new path starts with / and the base URL is app://..., we have to massage 
       return nil;
     }
     NSURL *bgURL = [TiUtils toURL:image proxy:proxy];
-    resultImage = [[ImageLoader sharedLoader] loadImmediateStretchableImage:bgURL withLeftCap:leftCap topCap:topCap];
+    resultImage = [[TiImageLoader sharedLoader] loadImmediateStretchableImage:bgURL withLeftCap:leftCap topCap:topCap];
     if (resultImage == nil) {
-      UIImage *downloadedImgage = [[ImageLoader sharedLoader] loadRemote:bgURL];
+      UIImage *downloadedImgage = [[TiImageLoader sharedLoader] loadRemote:bgURL];
       resultImage = [UIImageResize resizedImageWithLeftCap:leftCap topCap:topCap image:downloadedImgage];
     }
     if (resultImage == nil && [image isEqualToString:@"Default.png"]) {
@@ -2081,9 +2081,9 @@ If the new path starts with / and the base URL is app://..., we have to massage 
     }
 
     NSURL *bgURL = [TiUtils toURL:image proxy:proxy];
-    resultImage = [[ImageLoader sharedLoader] loadImmediateImage:bgURL];
+    resultImage = [[TiImageLoader sharedLoader] loadImmediateImage:bgURL];
     if (resultImage == nil) {
-      resultImage = [[ImageLoader sharedLoader] loadRemote:bgURL];
+      resultImage = [[TiImageLoader sharedLoader] loadRemote:bgURL];
     }
     if (resultImage == nil && [image isEqualToString:@"Default.png"]) {
       // special case where we're asking for Default.png and it's in Bundle not path

@@ -49,7 +49,7 @@
 		<string>Classes/TiPoint.h</string>
 		<string>Classes/TiColor.h</string>
 		<string>Classes/Ti2DMatrix.h</string>
-		<string>Classes/ImageLoader.h</string>
+		<string>Classes/TiImageLoader.h</string>
 		<string>Classes/TiDimension.h</string>
 		<string>Classes/TiUtils.h</string>
 	</array>

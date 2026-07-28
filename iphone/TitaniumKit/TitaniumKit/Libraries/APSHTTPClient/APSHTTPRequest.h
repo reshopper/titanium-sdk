@@ -76,7 +76,7 @@ typedef NS_ENUM(NSInteger, APSRequestError) {
  */
 @property (nonatomic, strong, readwrite) NSArray *runModes;
 
-// Only used in Titanium ImageLoader
+// Only used in Titanium TiImageLoader
 @property (nonatomic, strong, readwrite) NSDictionary *userInfo;
 
 - (void)send;

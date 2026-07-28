@@ -8,7 +8,7 @@
 
 #import "TiUITableView.h"
 #import "TiUITableViewProxy.h"
-#import <TitaniumKit/ImageLoader.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiApp.h>
 #import <TitaniumKit/TiLayoutQueue.h>
 #import <TitaniumKit/TiProxy.h>
@@ -1697,7 +1697,7 @@
 - (void)setBackgroundImage_:(id)arg
 {
   NSURL *url = [TiUtils toURL:arg proxy:(TiProxy *)self.proxy];
-  UIImage *image = [[ImageLoader sharedLoader] loadImmediateImage:url];
+  UIImage *image = [[TiImageLoader sharedLoader] loadImmediateImage:url];
   [[self tableView] setBackgroundColor:[UIColor colorWithPatternImage:image]];
 
   self.backgroundImage = arg;
@@ -2397,7 +2397,7 @@
 
     if (image != nil) {
       NSURL *url = [TiUtils toURL:image proxy:(TiProxy *)self.proxy];
-      action.image = [[ImageLoader sharedLoader] loadImmediateImage:url];
+      action.image = [[TiImageLoader sharedLoader] loadImmediateImage:url];
     }
 
     [nativeEditActions addObject:action];
@@ -2826,7 +2826,7 @@
 - (BOOL)scrollViewShouldScrollToTop:(UIScrollView *)scrollView
 {
   // suspend image loader while we're scrolling to improve performance
-  [[ImageLoader sharedLoader] suspend];
+  [[TiImageLoader sharedLoader] suspend];
   return YES;
 }
 
@@ -2897,13 +2897,13 @@
   [self fireScrollEvent:scrollView];
 
   // resume image loader when we're done scrolling
-  [[ImageLoader sharedLoader] resume];
+  [[TiImageLoader sharedLoader] resume];
 }
 
 - (void)scrollViewWillBeginDragging:(UIScrollView *)scrollView
 {
   // suspend image loader while we're scrolling to improve performance
-  [[ImageLoader sharedLoader] suspend];
+  [[TiImageLoader sharedLoader] suspend];
   if ([self.proxy _hasListeners:@"dragStart"]) { // TODO: Deprecate old event.
     [self.proxy fireEvent:@"dragStart" withObject:nil];
   }
@@ -2916,7 +2916,7 @@
 {
   if (!decelerate) {
     // resume image loader when we're done scrolling
-    [[ImageLoader sharedLoader] resume];
+    [[TiImageLoader sharedLoader] resume];
   }
   if ([self.proxy _hasListeners:@"dragEnd"]) { // TODO: Deprecate old event
     [self.proxy fireEvent:@"dragEnd" withObject:[NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:decelerate], @"decelerate", nil]];
@@ -2935,7 +2935,7 @@
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView
 {
   // resume image loader when we're done scrolling
-  [[ImageLoader sharedLoader] resume];
+  [[TiImageLoader sharedLoader] resume];
   if ([self.proxy _hasListeners:@"scrollEnd"]) { // TODO: Deprecate old event.
     [self.proxy fireEvent:@"scrollEnd" withObject:[self eventObjectForScrollView:scrollView]];
   }

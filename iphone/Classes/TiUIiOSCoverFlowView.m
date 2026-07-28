@@ -8,7 +8,7 @@
 
 #import "TiUIiOSCoverFlowView.h"
 #import "AFOpenFlow/UIImageExtras.h"
-#import <TitaniumKit/ImageLoader.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiBlob.h>
 
 @implementation TiUIiOSCoverFlowView
@@ -90,10 +90,10 @@
   } else if ([arg isKindOfClass:[TiFile class]]) {
     TiFile *file = (TiFile *)arg;
     NSURL *fileUrl = [TiUtils toURL:[file path] proxy:self.proxy];
-    image = [[ImageLoader sharedLoader] loadImmediateImage:fileUrl];
+    image = [[TiImageLoader sharedLoader] loadImmediateImage:fileUrl];
   } else if ([arg isKindOfClass:[NSString class]]) {
     NSURL *url_ = [TiUtils toURL:arg proxy:self.proxy];
-    image = [[ImageLoader sharedLoader] loadImmediateImage:url_];
+    image = [[TiImageLoader sharedLoader] loadImmediateImage:url_];
   } else if ([arg isKindOfClass:[UIImage class]]) {
     // called within this class
     image = (UIImage *)arg;
@@ -237,7 +237,7 @@
       urlString = [loadUrl valueForKey:@"image"];
     }
 
-    [loading setValue:[[ImageLoader sharedLoader] loadImage:[NSURL URLWithString:urlString]
+    [loading setValue:[[TiImageLoader sharedLoader] loadImage:[NSURL URLWithString:urlString]
                                                    delegate:self
                                                    userInfo:userInfo]
                forKey:[NUMINTEGER(index) stringValue]];

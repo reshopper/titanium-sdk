@@ -156,7 +156,7 @@ static NSArray *imageKeySequence;
 
   if (imageValue != nil) {
     NSURL *url_ = [TiUtils toURL:[TiUtils stringValue:imageValue] proxy:self];
-    UIImage *image = [[ImageLoader sharedLoader] loadImmediateImage:url_];
+    UIImage *image = [[TiImageLoader sharedLoader] loadImmediateImage:url_];
 
     if (image != nil) {
       return [[[TiBlob alloc] initWithImage:image] autorelease];
@@ -164,7 +164,7 @@ static NSArray *imageKeySequence;
 
     // we're on the non-UI thread, we need to block to load
 
-    image = [[ImageLoader sharedLoader] loadRemote:url_];
+    image = [[TiImageLoader sharedLoader] loadRemote:url_];
     return [[[TiBlob alloc] initWithImage:image] autorelease];
   }
   return nil;
@@ -178,7 +178,7 @@ USE_VIEW_FOR_CONTENT_WIDTH
 
 USE_VIEW_FOR_CONTENT_HEIGHT
 
-#pragma mark Handling ImageLoader
+#pragma mark Handling TiImageLoader
 
 - (void)setImage:(id)newImage
 {
@@ -197,7 +197,7 @@ USE_VIEW_FOR_CONTENT_HEIGHT
   if (hires) {
     info = [NSDictionary dictionaryWithObject:hires forKey:@"hires"];
   }
-  urlRequest = [[[ImageLoader sharedLoader] loadImage:url delegate:self userInfo:info] retain];
+  urlRequest = [[[TiImageLoader sharedLoader] loadImage:url delegate:self userInfo:info] retain];
 }
 
 - (void)cancelPendingImageLoads

@@ -18,7 +18,7 @@ FOUNDATION_EXPORT const unsigned char TitaniumKitVersionString[];
 
 #import <TitaniumKit/APIModule.h>
 #import <TitaniumKit/APSHTTPClient.h>
-#import <TitaniumKit/ImageLoader.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/JSValue+Addons.h>
 #import <TitaniumKit/KrollPromise.h>
 #import <TitaniumKit/Mimetypes.h>

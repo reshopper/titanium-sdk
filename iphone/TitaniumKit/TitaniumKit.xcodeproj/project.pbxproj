@@ -116,8 +116,8 @@
 		DB15FCB11F0A86E600A82C45 /* TiBindingTiValue.m in Sources */ = {isa = PBXBuildFile; fileRef = DB15FCAF1F0A86E600A82C45 /* TiBindingTiValue.m */; };
 		DB15FCB81F0A874F00A82C45 /* TopTiModule.h in Headers */ = {isa = PBXBuildFile; fileRef = DB15FCB61F0A874F00A82C45 /* TopTiModule.h */; };
 		DB15FCB91F0A874F00A82C45 /* TopTiModule.m in Sources */ = {isa = PBXBuildFile; fileRef = DB15FCB71F0A874F00A82C45 /* TopTiModule.m */; };
-		DB15FCC81F0A879B00A82C45 /* ImageLoader.h in Headers */ = {isa = PBXBuildFile; fileRef = DB15FCC61F0A879B00A82C45 /* ImageLoader.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		DB15FCC91F0A879B00A82C45 /* ImageLoader.m in Sources */ = {isa = PBXBuildFile; fileRef = DB15FCC71F0A879B00A82C45 /* ImageLoader.m */; };
+		DB15FCC81F0A879B00A82C45 /* TiImageLoader.h in Headers */ = {isa = PBXBuildFile; fileRef = DB15FCC61F0A879B00A82C45 /* TiImageLoader.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		DB15FCC91F0A879B00A82C45 /* TiImageLoader.m in Sources */ = {isa = PBXBuildFile; fileRef = DB15FCC71F0A879B00A82C45 /* TiImageLoader.m */; };
 		DB15FCCC1F0A87A400A82C45 /* TiErrorController.h in Headers */ = {isa = PBXBuildFile; fileRef = DB15FCCA1F0A87A400A82C45 /* TiErrorController.h */; };
 		DB15FCCD1F0A87A400A82C45 /* TiErrorController.m in Sources */ = {isa = PBXBuildFile; fileRef = DB15FCCB1F0A87A400A82C45 /* TiErrorController.m */; };
 		DB15FCD01F0A87C100A82C45 /* NSData+Additions.h in Headers */ = {isa = PBXBuildFile; fileRef = DB15FCCE1F0A87C100A82C45 /* NSData+Additions.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -284,8 +284,8 @@
 		DB15FCAF1F0A86E600A82C45 /* TiBindingTiValue.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = TiBindingTiValue.m; sourceTree = "<group>"; };
 		DB15FCB61F0A874F00A82C45 /* TopTiModule.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = TopTiModule.h; sourceTree = "<group>"; };
 		DB15FCB71F0A874F00A82C45 /* TopTiModule.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = TopTiModule.m; sourceTree = "<group>"; };
-		DB15FCC61F0A879B00A82C45 /* ImageLoader.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ImageLoader.h; sourceTree = "<group>"; };
-		DB15FCC71F0A879B00A82C45 /* ImageLoader.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ImageLoader.m; sourceTree = "<group>"; };
+		DB15FCC61F0A879B00A82C45 /* TiImageLoader.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = TiImageLoader.h; sourceTree = "<group>"; };
+		DB15FCC71F0A879B00A82C45 /* TiImageLoader.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = TiImageLoader.m; sourceTree = "<group>"; };
 		DB15FCCA1F0A87A400A82C45 /* TiErrorController.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = TiErrorController.h; sourceTree = "<group>"; };
 		DB15FCCB1F0A87A400A82C45 /* TiErrorController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = TiErrorController.m; sourceTree = "<group>"; };
 		DB15FCCE1F0A87C100A82C45 /* NSData+Additions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSData+Additions.h"; sourceTree = "<group>"; };
@@ -470,8 +470,8 @@
 				DB1596572075389000292B19 /* APIModule.m */,
 				DB258D191F097680000D0D8D /* Bridge.h */,
 				DB258D1A1F097680000D0D8D /* Bridge.m */,
-				DB15FCC61F0A879B00A82C45 /* ImageLoader.h */,
-				DB15FCC71F0A879B00A82C45 /* ImageLoader.m */,
+				DB15FCC61F0A879B00A82C45 /* TiImageLoader.h */,
+				DB15FCC71F0A879B00A82C45 /* TiImageLoader.m */,
 				B7385F582465A4B3007DB1F2 /* KrollModule.h */,
 				B7385F572465A4B3007DB1F2 /* KrollModule.m */,
 				DB15FC9E1F0A863B00A82C45 /* LayoutConstraint.h */,
@@ -668,7 +668,7 @@
 				DB15FC4D1F0A848200A82C45 /* TiApp.h in Headers */,
 				DB15FC811F0A855F00A82C45 /* UIImage+Resize.h in Headers */,
 				DB15FC5B1F0A84C000A82C45 /* TiHost.h in Headers */,
-				DB15FCC81F0A879B00A82C45 /* ImageLoader.h in Headers */,
+				DB15FCC81F0A879B00A82C45 /* TiImageLoader.h in Headers */,
 				B7D114DB2465F48600B95107 /* Module.h in Headers */,
 				DB15FC941F0A860600A82C45 /* TiAnimation.h in Headers */,
 				DB15FC8B1F0A859800A82C45 /* UIImage+RoundedCorner.h in Headers */,
@@ -860,7 +860,7 @@
 				DB15FD2D1F0A93EF00A82C45 /* TiStreamProxy.m in Sources */,
 				DB15FD1D1F0A89A400A82C45 /* TiUIWindowProxy.m in Sources */,
 				DB258D9E1F097680000D0D8D /* TiUIView.m in Sources */,
-				DB15FCC91F0A879B00A82C45 /* ImageLoader.m in Sources */,
+				DB15FCC91F0A879B00A82C45 /* TiImageLoader.m in Sources */,
 				DB15FC581F0A84B700A82C45 /* TiFile.m in Sources */,
 				DB15FC661F0A84E000A82C45 /* TiBuffer.m in Sources */,
 				DB258DA41F097680000D0D8D /* TiViewTemplate.m in Sources */,
@@ -1059,6 +1059,7 @@
 					"-lsqlite3",
 					"-lz",
 					"-licucore",
+					"-Wl,-alias,_OBJC_CLASS_$$_TiImageLoader,_OBJC_CLASS_$$_ImageLoader",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.appcelerator.TitaniumKit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1115,6 +1116,7 @@
 					"-lsqlite3",
 					"-lz",
 					"-licucore",
+					"-Wl,-alias,_OBJC_CLASS_$$_TiImageLoader,_OBJC_CLASS_$$_ImageLoader",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.appcelerator.TitaniumKit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
