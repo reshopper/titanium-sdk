@@ -43,9 +43,9 @@
 #import <WebKit/WebKit.h>
 #endif
 
-#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiApp.h>
 #import <TitaniumKit/TiColor.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiUtils.h>
 
 @implementation UIModule

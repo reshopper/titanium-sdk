@@ -8,8 +8,8 @@
 
 #import "TiUIiOSCoverFlowView.h"
 #import "AFOpenFlow/UIImageExtras.h"
-#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiBlob.h>
+#import <TitaniumKit/TiImageLoader.h>
 
 @implementation TiUIiOSCoverFlowView
 
@@ -238,8 +238,8 @@
     }
 
     [loading setValue:[[TiImageLoader sharedLoader] loadImage:[NSURL URLWithString:urlString]
-                                                   delegate:self
-                                                   userInfo:userInfo]
+                                                     delegate:self
+                                                     userInfo:userInfo]
                forKey:[NUMINTEGER(index) stringValue]];
   }
   [loadLock unlock];

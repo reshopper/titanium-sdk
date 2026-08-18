@@ -8,8 +8,8 @@
 
 #import "TiUITableView.h"
 #import "TiUITableViewProxy.h"
-#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiApp.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiLayoutQueue.h>
 #import <TitaniumKit/TiProxy.h>
 #import <TitaniumKit/TiUtils.h>

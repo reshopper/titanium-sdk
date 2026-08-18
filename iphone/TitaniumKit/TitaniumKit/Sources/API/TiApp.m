@@ -6,7 +6,6 @@
  */
 #include <stdio.h>
 
-#import "TiImageLoader.h"
 #import "Mimetypes.h"
 #import "NSData+Additions.h"
 #import "TiApp.h"
@@ -14,6 +13,7 @@
 #import "TiBlob.h"
 #import "TiErrorController.h"
 #import "TiExceptionHandler.h"
+#import "TiImageLoader.h"
 #import "TiLogServer.h"
 #import "TiSharedConfig.h"
 #import "Webcolor.h"

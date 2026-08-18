@@ -5,13 +5,13 @@
  * Please see the LICENSE included with this distribution for details.
  */
 #import "TiUIView.h"
-#import "TiImageLoader.h"
 #import "Ti2DMatrix.h"
 #import "Ti3DMatrix.h"
 #import "TiApp.h"
 #import "TiBase.h"
 #import "TiBlob.h"
 #import "TiColor.h"
+#import "TiImageLoader.h"
 #import "TiRect.h"
 #import "TiUtils.h"
 #import "TiViewProxy.h"

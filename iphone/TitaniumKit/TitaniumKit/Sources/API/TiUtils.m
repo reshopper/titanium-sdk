@@ -7,7 +7,6 @@
 #import <CommonCrypto/CommonDigest.h>
 #import <QuartzCore/QuartzCore.h>
 
-#import "TiImageLoader.h"
 #import "TiApp.h"
 #import "TiBase.h"
 #import "TiBlob.h"
@@ -16,6 +15,7 @@
 #import "TiExceptionHandler.h"
 #import "TiFile.h"
 #import "TiHost.h"
+#import "TiImageLoader.h"
 #import "TiPoint.h"
 #import "TiProxy.h"
 #import "TiSharedConfig.h"
