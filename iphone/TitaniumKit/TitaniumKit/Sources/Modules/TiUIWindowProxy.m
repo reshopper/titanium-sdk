@@ -6,9 +6,9 @@
  */
 
 #import "TiUIWindowProxy.h"
-#import "TiImageLoader.h"
 #import "TiApp.h"
 #import "TiComplexValue.h"
+#import "TiImageLoader.h"
 #import "TiLayoutQueue.h"
 #import "TiUIViewProxy.h"
 #import "Webcolor.h"

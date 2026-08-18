@@ -7,8 +7,8 @@
 #ifdef USE_TI_UILISTVIEW
 
 #import "TiUIListItem.h"
-#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiApp.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiUtils.h>
 #import <TitaniumKit/TiViewProxy.h>
 #import <TitaniumKit/Webcolor.h>

@@ -15,7 +15,6 @@ FOUNDATION_EXPORT const unsigned char TitaniumKitVersionString[];
 
 #import <TitaniumKit/Libraries/APSHTTPClient/APSHTTPClient.h>
 #import <TitaniumKit/Sources/API/APIModule.h>
-#import <TitaniumKit/Sources/API/TiImageLoader.h>
 #import <TitaniumKit/Sources/API/Mimetypes.h>
 #import <TitaniumKit/Sources/API/NSData+Additions.h>
 #import <TitaniumKit/Sources/API/OperationQueue.h>
@@ -27,6 +26,7 @@ FOUNDATION_EXPORT const unsigned char TitaniumKitVersionString[];
 #import <TitaniumKit/Sources/API/TiColor.h>
 #import <TitaniumKit/Sources/API/TiComplexValue.h>
 #import <TitaniumKit/Sources/API/TiExceptionHandler.h>
+#import <TitaniumKit/Sources/API/TiImageLoader.h>
 #import <TitaniumKit/Sources/API/TiLayoutQueue.h>
 #import <TitaniumKit/Sources/API/TiLocale.h>
 #import <TitaniumKit/Sources/API/TiLogServer.h>

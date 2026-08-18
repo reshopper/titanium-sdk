@@ -10,11 +10,11 @@
 #import "TiSymbolEffectManager.h"
 #import "TiUIImageViewProxy.h"
 #import <CommonCrypto/CommonDigest.h>
-#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/OperationQueue.h>
 #import <TitaniumKit/TiBase.h>
 #import <TitaniumKit/TiBlob.h>
 #import <TitaniumKit/TiFile.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiProxy.h>
 #import <TitaniumKit/TiUtils.h>
 #import <TitaniumKit/TiViewProxy.h>

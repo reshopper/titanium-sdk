@@ -9,10 +9,10 @@
 #import "TiUITabProxy.h"
 #import "TiUITabGroup.h"
 #import "TiUITabGroupProxy.h"
-#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/KrollPromise.h>
 #import <TitaniumKit/TiApp.h>
 #import <TitaniumKit/TiBlob.h>
+#import <TitaniumKit/TiImageLoader.h>
 #import <TitaniumKit/TiProxy.h>
 #import <TitaniumKit/TiUtils.h>
 
