@@ -58,6 +58,12 @@ public class TiUIScrollView extends TiUIView
 	private boolean isTouching = false;
 	private Object pendingContentInsets = null;
 
+	/** Per-side "edgeFade" lengths in pixels. A value of zero means that side is not faded. */
+	private int edgeFadeTop = 0;
+	private int edgeFadeBottom = 0;
+	private int edgeFadeLeft = 0;
+	private int edgeFadeRight = 0;
+
 	private static int verticalAttrId = -1;
 	private static int horizontalAttrId = -1;
 	private int type;
@@ -496,6 +502,25 @@ public class TiUIScrollView extends TiUIView
 			}
 		}
 
+		/** Overridden to give the top edge its own "edgeFade" length, independent of the bottom. */
+		@Override
+		protected float getTopFadingEdgeStrength()
+		{
+			return computeEdgeFadeStrength(getScrollY(), edgeFadeTop);
+		}
+
+		/** Overridden to give the bottom edge its own "edgeFade" length, independent of the top. */
+		@Override
+		protected float getBottomFadingEdgeStrength()
+		{
+			if (getChildCount() == 0) {
+				return 0.0f;
+			}
+			int bottomEdge = getHeight() - getPaddingBottom();
+			int remaining = getChildAt(0).getBottom() - getScrollY() - bottomEdge;
+			return computeEdgeFadeStrength(remaining, edgeFadeBottom);
+		}
+
 		@Override
 		protected void onScrollChanged(int l, int t, int oldl, int oldt)
 		{
@@ -656,6 +681,25 @@ public class TiUIScrollView extends TiUIView
 				scrollTo(offsetX.getAsPixels(scrollView), offsetY.getAsPixels(scrollView));
 				setInitialOffset = true;
 			}
+		}
+
+		/** Overridden to give the left edge its own "edgeFade" length, independent of the right. */
+		@Override
+		protected float getLeftFadingEdgeStrength()
+		{
+			return computeEdgeFadeStrength(getScrollX(), edgeFadeLeft);
+		}
+
+		/** Overridden to give the right edge its own "edgeFade" length, independent of the left. */
+		@Override
+		protected float getRightFadingEdgeStrength()
+		{
+			if (getChildCount() == 0) {
+				return 0.0f;
+			}
+			int rightEdge = getWidth() - getPaddingRight();
+			int remaining = getChildAt(0).getRight() - getScrollX() - rightEdge;
+			return computeEdgeFadeStrength(remaining, edgeFadeRight);
 		}
 
 		@Override
@@ -909,6 +953,118 @@ public class TiUIScrollView extends TiUIView
 		}
 	}
 
+	/**
+	 * Applies the "edgeFade" property, fading the scrollable content out towards the edges it can
+	 * still be scrolled past.
+	 * <p>
+	 * Built on Android's fading edge support, which means the fade grows in as the content is
+	 * scrolled past an edge and is absent when that edge is already at the end of the content.
+	 * Google's implementation only supports one length for the whole axis, so the per-side lengths
+	 * are applied by scaling each side's fade strength. See computeEdgeFadeStrength().
+	 *
+	 * @param value
+	 * Either a single fade length applied to all sides, or a dictionary with "top", "bottom",
+	 * "left" and/or "right" lengths. A side set to zero or left out is not faded. Can be null to
+	 * disable the fade entirely.
+	 */
+	private void setEdgeFade(Object value)
+	{
+		View view = this.scrollView;
+		if (view == null) {
+			return;
+		}
+
+		// Fetch each side's fade length, in pixels.
+		int top = 0;
+		int bottom = 0;
+		int left = 0;
+		int right = 0;
+		if (value instanceof HashMap) {
+			KrollDict dictionary = new KrollDict((HashMap) value);
+			top = toEdgeFadePixels(dictionary.get(TiC.PROPERTY_TOP), TiDimension.TYPE_HEIGHT);
+			bottom = toEdgeFadePixels(dictionary.get(TiC.PROPERTY_BOTTOM), TiDimension.TYPE_HEIGHT);
+			left = toEdgeFadePixels(dictionary.get(TiC.PROPERTY_LEFT), TiDimension.TYPE_WIDTH);
+			right = toEdgeFadePixels(dictionary.get(TiC.PROPERTY_RIGHT), TiDimension.TYPE_WIDTH);
+		} else if (value != null) {
+			// A single value fades every side by the same amount.
+			top = toEdgeFadePixels(value, TiDimension.TYPE_HEIGHT);
+			bottom = top;
+			left = toEdgeFadePixels(value, TiDimension.TYPE_WIDTH);
+			right = left;
+		}
+		this.edgeFadeTop = top;
+		this.edgeFadeBottom = bottom;
+		this.edgeFadeLeft = left;
+		this.edgeFadeRight = right;
+
+		// Enable the fade on the scrolling axis only. The other axis never scrolls, so Android
+		// would draw a permanent fade there.
+		int maxLength = getMaxEdgeFadeLength();
+		boolean isEnabled = (maxLength > 0);
+		if (isEnabled) {
+			view.setFadingEdgeLength(maxLength);
+		}
+		if (this.type == TYPE_HORIZONTAL) {
+			view.setHorizontalFadingEdgeEnabled(isEnabled);
+		} else {
+			view.setVerticalFadingEdgeEnabled(isEnabled);
+		}
+		view.invalidate();
+	}
+
+	/**
+	 * Converts a single "edgeFade" length to pixels.
+	 * @param value The length as a number or dimension string. Can be null.
+	 * @param dimensionType A TiDimension TYPE_* constant matching the axis the length applies to.
+	 * @return Returns the length in pixels. Returns zero if given null or a negative length.
+	 */
+	private int toEdgeFadePixels(Object value, int dimensionType)
+	{
+		if ((value == null) || (this.scrollView == null)) {
+			return 0;
+		}
+		TiDimension dimension = TiConvert.toTiDimension(value, dimensionType);
+		if (dimension == null) {
+			return 0;
+		}
+		return Math.max(dimension.getAsPixels(this.scrollView), 0);
+	}
+
+	/**
+	 * Gets the longest "edgeFade" length assigned to the axis this scroll view scrolls on.
+	 * This is the length handed to Android via View.setFadingEdgeLength().
+	 * @return Returns the length in pixels. Returns zero if neither side of the axis is faded.
+	 */
+	private int getMaxEdgeFadeLength()
+	{
+		if (this.type == TYPE_HORIZONTAL) {
+			return Math.max(this.edgeFadeLeft, this.edgeFadeRight);
+		}
+		return Math.max(this.edgeFadeTop, this.edgeFadeBottom);
+	}
+
+	/**
+	 * Calculates the fading edge strength for one side of the scroll view.
+	 * <p>
+	 * Android draws a fade of "fadingEdgeLength * strength" pixels, and that length is shared by
+	 * both sides of the axis. Deriving the strength from this side's own length is therefore what
+	 * lets each side have its own fade, and lets a side be switched off with a length of zero.
+	 *
+	 * @param availablePixels How far the content can still be scrolled past this side, in pixels.
+	 * @param sideLength This side's assigned fade length, in pixels.
+	 * @return Returns a fade strength between 0.0 and 1.0. Returns 0.0 if this side is not faded.
+	 */
+	private float computeEdgeFadeStrength(int availablePixels, int sideLength)
+	{
+		int maxLength = getMaxEdgeFadeLength();
+		if ((maxLength <= 0) || (sideLength <= 0) || (availablePixels <= 0)) {
+			return 0.0f;
+		}
+
+		// Grow the fade in as content scrolls past the edge, but never past this side's length.
+		return Math.min(availablePixels, sideLength) / (float) maxLength;
+	}
+
 	public KrollDict getContentInsets()
 	{
 		View view = this.scrollView;
@@ -969,6 +1125,8 @@ public class TiUIScrollView extends TiUIView
 			if (this.scrollView != null) {
 				this.scrollView.setOverScrollMode(TiConvert.toInt(newValue, View.OVER_SCROLL_ALWAYS));
 			}
+		} else if (TiC.PROPERTY_EDGE_FADE.equals(key)) {
+			setEdgeFade(newValue);
 		}
 
 		super.propertyChanged(key, oldValue, newValue, proxy);
@@ -1080,6 +1238,11 @@ public class TiUIScrollView extends TiUIView
 		if (d.containsKey(TiC.PROPERTY_OVER_SCROLL_MODE)) {
 			this.scrollView.setOverScrollMode(
 				TiConvert.toInt(d.get(TiC.PROPERTY_OVER_SCROLL_MODE), View.OVER_SCROLL_ALWAYS));
+		}
+
+		// Must be applied after the scroll view has been created since the fade follows its scroll axis.
+		if (d.containsKey(TiC.PROPERTY_EDGE_FADE)) {
+			setEdgeFade(d.get(TiC.PROPERTY_EDGE_FADE));
 		}
 
 		// Set up the swipe refresh layout container which wraps the scroll view.

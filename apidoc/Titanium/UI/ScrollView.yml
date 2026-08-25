@@ -352,6 +352,46 @@ properties:
     default: false
     platforms: [iphone, ipad, macos]
 
+  - name: edgeFade
+    summary: Lengths of the gradients that fade the content out towards the edges of the scroll view.
+    description: |
+        Set this to fade the scrollable content out into transparency at the edges of the scroll
+        view, instead of having it cut off abruptly. This is useful to hint that there is more
+        content beyond the visible area.
+
+        Assign a dictionary with `top`, `bottom`, `left` and/or `right` lengths to control each side
+        separately, or a single number to fade every side by the same amount. A side set to `0` or
+        left out of the dictionary is not faded, so individual edges can be switched on and off at
+        runtime by reassigning the property:
+
+        ``` js
+        // Fade the right edge only.
+        scrollView.edgeFade = { right: 24 };
+
+        // Fade both horizontal edges.
+        scrollView.edgeFade = { left: 24, right: 24 };
+
+        // Turn the fade off entirely.
+        scrollView.edgeFade = 0;
+        ```
+
+        The fade only applies along the axis the scroll view scrolls on. On Android that axis is the
+        one given by the `scrollType` property; on iOS it is deduced from the content size,
+        preferring the vertical axis when the content is scrollable in both directions. Lengths
+        given for the other axis are ignored.
+
+        Each fade grows in as the content is scrolled past its edge, and is absent while that edge
+        is already at the end of the content. So a scroll view that is scrolled to the top shows a
+        fade at the bottom only. Each fade is also capped at half the length of the scroll view, so
+        the two edges of an axis never overlap.
+
+        Because the content is faded to transparency rather than to a color, whatever is behind the
+        scroll view shows through. Set a `backgroundColor` on the scroll view if the content should
+        instead fade into a solid color.
+    type: [ Number, Padding ]
+    default: 0
+    since: "13.8.0"
+
   - name: horizontalBounce
     summary: Determines whether horizontal scroll bounce of the scrollable region is enabled.
     description: |
