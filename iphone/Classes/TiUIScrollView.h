@@ -10,6 +10,7 @@
 #import "TiUIRefreshControlProxy.h"
 #endif
 
+#import <QuartzCore/QuartzCore.h>
 #import <TitaniumKit/TiUIView.h>
 
 @interface TiUIScrollViewImpl : UIScrollView {
@@ -38,6 +39,12 @@
 #endif
 
   BOOL needsHandleContentSize;
+
+  CAGradientLayer *edgeFadeLayer;
+  CGFloat edgeFadeTop;
+  CGFloat edgeFadeBottom;
+  CGFloat edgeFadeLeft;
+  CGFloat edgeFadeRight;
 }
 
 @property (nonatomic, retain, readonly) TiUIScrollViewImpl *scrollView;
@@ -56,6 +63,7 @@
 #endif
 - (void)scrollToBottom:(id)options;
 - (void)scrollToTop;
+- (void)updateEdgeFadeMask;
 
 @end
 

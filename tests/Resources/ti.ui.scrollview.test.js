@@ -231,6 +231,65 @@ describe('Titanium.UI.ScrollView', function () {
 		win.open();
 	});
 
+	describe('edgeFade', () => {
+		it('accepts a single length for every side', function () {
+			const scrollView = Ti.UI.createScrollView({ edgeFade: 24 });
+			should(scrollView.edgeFade).be.eql(24);
+		});
+
+		it('accepts per-side lengths', function () {
+			const scrollView = Ti.UI.createScrollView({ edgeFade: { left: 16, right: 24 } });
+			should(scrollView.edgeFade).be.an.Object();
+			should(scrollView.edgeFade.left).be.eql(16);
+			should(scrollView.edgeFade.right).be.eql(24);
+		});
+
+		it('is settable after creation', function () {
+			const scrollView = Ti.UI.createScrollView({});
+			scrollView.edgeFade = { top: 32 };
+			should(scrollView.edgeFade.top).be.eql(32);
+		});
+
+		it('can be disabled with 0', function () {
+			const scrollView = Ti.UI.createScrollView({ edgeFade: 24 });
+			scrollView.edgeFade = 0;
+			should(scrollView.edgeFade).be.eql(0);
+		});
+
+		// Renders a horizontally scrolling view, then switches which edges are faded and turns the
+		// fade back off. This exercises the native mask/fading-edge setup and teardown.
+		it('renders a horizontal scroll view and toggles individual edges', function (finish) {
+			this.slow(5000);
+			this.timeout(20000);
+			win = Ti.UI.createWindow({ backgroundColor: 'white' });
+			const scrollView = Ti.UI.createScrollView({
+				scrollType: 'horizontal',
+				layout: 'horizontal',
+				edgeFade: { right: 24 },
+				width: 200,
+				height: 50
+			});
+			for (let i = 0; i < 10; i++) {
+				scrollView.add(Ti.UI.createView({ width: 60, height: 40, backgroundColor: 'blue', left: 5 }));
+			}
+			win.addEventListener('postlayout', function listener () {
+				win.removeEventListener('postlayout', listener);
+				try {
+					should(scrollView.edgeFade.right).be.eql(24);
+					scrollView.edgeFade = { left: 24, right: 24 };
+					should(scrollView.edgeFade.left).be.eql(24);
+					scrollView.edgeFade = 0;
+					should(scrollView.edgeFade).be.eql(0);
+				} catch (err) {
+					return finish(err);
+				}
+				finish();
+			});
+			win.add(scrollView);
+			win.open();
+		});
+	});
+
 	it('#scrollTo()', function () {
 		const bar = Ti.UI.createScrollView({});
 		should(bar.scrollTo).be.a.Function();

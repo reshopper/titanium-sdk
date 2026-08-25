@@ -89,6 +89,10 @@
 #ifdef USE_TI_UIREFRESHCONTROL
   RELEASE_TO_NIL(refreshControl);
 #endif
+  if (edgeFadeLayer != nil) {
+    [scrollView layer].mask = nil;
+    RELEASE_TO_NIL(edgeFadeLayer);
+  }
   RELEASE_TO_NIL(scrollView);
   [super dealloc];
 }
@@ -301,6 +305,8 @@
   needsHandleContentSize = NO;
   [(TiUIScrollViewProxy *)[self proxy] layoutChildrenAfterContentSize:NO];
 #endif
+  // The fade depends on how much content there is left to scroll to.
+  [self updateEdgeFadeMask];
 }
 
 - (void)frameSizeChanged:(CGRect)frame bounds:(CGRect)visibleBounds
@@ -308,6 +314,7 @@
   // Treat this as a size change
   [(TiViewProxy *)[self proxy] willChangeSize];
   [super frameSizeChanged:frame bounds:visibleBounds];
+  [self updateEdgeFadeMask];
 }
 
 - (void)scrollToBottom:(id)options
@@ -444,6 +451,7 @@
   } else {
     [[self scrollView] setContentInset:newInsets];
   }
+  [self updateEdgeFadeMask];
 }
 
 #if IS_SDK_IOS_26
@@ -533,6 +541,111 @@
   [[self scrollView] setCanCancelContentTouches:[TiUtils boolValue:args def:YES]];
 }
 
+#pragma mark Edge fade
+
+- (void)setEdgeFade_:(id)value
+{
+  if ([value isKindOfClass:[NSDictionary class]]) {
+    edgeFadeTop = MAX([TiUtils floatValue:@"top" properties:value def:0.0], 0.0);
+    edgeFadeBottom = MAX([TiUtils floatValue:@"bottom" properties:value def:0.0], 0.0);
+    edgeFadeLeft = MAX([TiUtils floatValue:@"left" properties:value def:0.0], 0.0);
+    edgeFadeRight = MAX([TiUtils floatValue:@"right" properties:value def:0.0], 0.0);
+  } else {
+    // A single value fades every side by the same amount.
+    CGFloat length = MAX([TiUtils floatValue:value def:0.0], 0.0);
+    edgeFadeTop = length;
+    edgeFadeBottom = length;
+    edgeFadeLeft = length;
+    edgeFadeRight = length;
+  }
+  [self.proxy replaceValue:value forKey:@"edgeFade" notification:NO];
+
+  BOOL hasFade = (edgeFadeTop > 0.0) || (edgeFadeBottom > 0.0) || (edgeFadeLeft > 0.0) || (edgeFadeRight > 0.0);
+  if (!hasFade) {
+    if (edgeFadeLayer != nil) {
+      [[self scrollView] layer].mask = nil;
+      RELEASE_TO_NIL(edgeFadeLayer);
+    }
+    return;
+  }
+
+  if (edgeFadeLayer == nil) {
+    edgeFadeLayer = [[CAGradientLayer alloc] init];
+    // The mask is repositioned on every scroll, so implicit animations would make it lag behind.
+    edgeFadeLayer.actions = @{
+      @"position" : [NSNull null],
+      @"bounds" : [NSNull null],
+      @"colors" : [NSNull null],
+      @"locations" : [NSNull null],
+      @"startPoint" : [NSNull null],
+      @"endPoint" : [NSNull null]
+    };
+    [[self scrollView] layer].mask = edgeFadeLayer;
+  }
+  [self updateEdgeFadeMask];
+}
+
+- (void)updateEdgeFadeMask
+{
+  if ((edgeFadeLayer == nil) || (scrollView == nil)) {
+    return;
+  }
+
+  CGSize boundsSize = [scrollView bounds].size;
+  if ((boundsSize.width <= 0) || (boundsSize.height <= 0)) {
+    return;
+  }
+
+  CGPoint offset = [scrollView contentOffset];
+  CGSize contentSize = [scrollView contentSize];
+  UIEdgeInsets insets = [scrollView contentInset];
+
+  // Fade along the axis that can actually be scrolled. Vertical wins when both can.
+  BOOL canScrollVertically = (contentSize.height + insets.top + insets.bottom) > (boundsSize.height + 0.5);
+  BOOL canScrollHorizontally = (contentSize.width + insets.left + insets.right) > (boundsSize.width + 0.5);
+  BOOL isVertical = canScrollVertically || !canScrollHorizontally;
+
+  // Distance already scrolled past the leading edge, and distance left before the trailing edge.
+  CGFloat viewportLength;
+  CGFloat leadingOffset;
+  CGFloat trailingOffset;
+  CGFloat leadingLength;
+  CGFloat trailingLength;
+  if (isVertical) {
+    viewportLength = boundsSize.height;
+    leadingOffset = offset.y + insets.top;
+    trailingOffset = (contentSize.height + insets.bottom) - (offset.y + boundsSize.height);
+    leadingLength = edgeFadeTop;
+    trailingLength = edgeFadeBottom;
+  } else {
+    viewportLength = boundsSize.width;
+    leadingOffset = offset.x + insets.left;
+    trailingOffset = (contentSize.width + insets.right) - (offset.x + boundsSize.width);
+    leadingLength = edgeFadeLeft;
+    trailingLength = edgeFadeRight;
+  }
+
+  // Grow each fade in as content scrolls past its edge, matching Android's fading edge behavior.
+  // An edge that has nothing left to scroll to, or no length of its own, is not faded at all.
+  CGFloat maxFade = viewportLength / 2.0;
+  CGFloat leadingFade = MIN(MAX(leadingOffset, 0.0), MIN(leadingLength, maxFade));
+  CGFloat trailingFade = MIN(MAX(trailingOffset, 0.0), MIN(trailingLength, maxFade));
+
+  id opaqueColor = (id)[UIColor blackColor].CGColor;
+  id clearColor = (id)[UIColor clearColor].CGColor;
+
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  edgeFadeLayer.colors = @[ clearColor, opaqueColor, opaqueColor, clearColor ];
+  edgeFadeLayer.locations = @[ @(0.0), @(leadingFade / viewportLength), @(1.0 - (trailingFade / viewportLength)), @(1.0) ];
+  edgeFadeLayer.startPoint = isVertical ? CGPointMake(0.5, 0.0) : CGPointMake(0.0, 0.5);
+  edgeFadeLayer.endPoint = isVertical ? CGPointMake(0.5, 1.0) : CGPointMake(1.0, 0.5);
+  // A scroll view scrolls by moving its bounds origin, so the mask must follow the content offset
+  // to stay pinned to the visible viewport.
+  edgeFadeLayer.frame = CGRectMake(offset.x, offset.y, boundsSize.width, boundsSize.height);
+  [CATransaction commit];
+}
+
 #pragma mark scrollView delegate stuff
 
 - (void)scrollViewDidEndDecelerating:(UIScrollView *)scrollView_ // any offset changes
@@ -542,6 +655,7 @@
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView_ // any offset changes
 {
+  [self updateEdgeFadeMask];
   [(id<UIScrollViewDelegate>)[self proxy] scrollViewDidScroll:scrollView_];
 }
 
@@ -579,6 +693,8 @@
   }
   wrapperView.frame = frameToCenter;
 #endif
+  // Zooming changes the content size, and with it how much is left to scroll to.
+  [self updateEdgeFadeMask];
 }
 
 - (void)scrollViewWillBeginDragging:(UIScrollView *)scrollView_

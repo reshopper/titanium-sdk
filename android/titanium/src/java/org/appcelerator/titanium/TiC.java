@@ -421,6 +421,7 @@ public class TiC
 	public static final String PROPERTY_DRAWER_LOCK_MODE = "drawerLockMode";
 	public static final String PROPERTY_DURATION = "duration";
 	public static final String PROPERTY_SPRING_VELOCITY = "springVelocity";
+	public static final String PROPERTY_EDGE_FADE = "edgeFade";
 	public static final String PROPERTY_EDITABLE = "editable";
 	public static final String PROPERTY_EDITING = "editing";
 	public static final String PROPERTY_ELEVATION = "elevation";
