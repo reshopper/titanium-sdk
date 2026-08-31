@@ -7,8 +7,10 @@
 package ti.modules.titanium.ui.widget.listview;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import org.appcelerator.kroll.KrollDict;
 import org.appcelerator.titanium.TiApplication;
@@ -32,6 +34,7 @@ import androidx.recyclerview.selection.ItemKeyProvider;
 import androidx.recyclerview.selection.SelectionPredicates;
 import androidx.recyclerview.selection.SelectionTracker;
 import androidx.recyclerview.selection.StorageStrategy;
+import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -42,6 +45,9 @@ import ti.modules.titanium.ui.widget.searchbar.TiUISearchBar.OnSearchChangeListe
 public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeListener
 {
 	private static final String TAG = "TiListView";
+
+	/** Android only property which opts a list into animated row inserts/deletes/moves. */
+	public static final String PROPERTY_ANIMATE_ROWS = "animateRows";
 
 	private final ListViewAdapter adapter;
 	private final ListDividerItemDecoration decoration;
@@ -56,6 +62,11 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 	private boolean isScrolling = false;
 	private boolean continuousUpdate = false;
 	private boolean forceUpdate = false;
+	private boolean animateRows = false;
+	private RecyclerView.ItemAnimator rowItemAnimator = null;
+	private ListItemProxy headerPlaceholder = null;
+	private ListItemProxy footerPlaceholder = null;
+	private Map<ListSectionProxy, ListItemProxy> sectionPlaceholders = new HashMap<>();
 	private int lastScrollDeltaY;
 	private int scrollOffsetX = 0;
 	private int scrollOffsetY = 0;
@@ -177,7 +188,8 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 			}
 		});
 
-		// Disable list animations.
+		// Disable list animations by default.
+		// An animator is only attached for updates which are allowed to animate, see update().
 		this.recyclerView.setItemAnimator(null);
 
 		// Disable cache since it creates cached holder dynamically, which causes stutter on initial scroll.
@@ -286,6 +298,7 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 			= properties.optBoolean(TiC.PROPERTY_ALLOWS_MULTIPLE_SELECTION_DURING_EDITING, false);
 		continuousUpdate = properties.optBoolean(TiC.PROPERTY_CONTINUOUS_UPDATE, false);
 		forceUpdate = properties.optBoolean("forceUpdates", false);
+		setAnimateRows(properties.optBoolean(PROPERTY_ANIMATE_ROWS, false));
 
 		if (properties.optBoolean(TiC.PROPERTY_FIXED_SIZE, false)) {
 			this.recyclerView.setHasFixedSize(true);
@@ -703,7 +716,8 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 
 		// Add placeholder item for ListView header.
 		if (hasHeader) {
-			final ListItemProxy item = new ListItemProxy(true);
+			final ListItemProxy item = obtainPlaceholder(this.headerPlaceholder);
+			this.headerPlaceholder = item;
 
 			item.getProperties().put(TiC.PROPERTY_HEADER_TITLE, properties.get(TiC.PROPERTY_HEADER_TITLE));
 			item.getProperties().put(TiC.PROPERTY_HEADER_VIEW, properties.get(TiC.PROPERTY_HEADER_VIEW));
@@ -713,6 +727,9 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 		}
 
 		// Iterate through sections.
+		// Placeholders are re-mapped into a new collection so that placeholders belonging to
+		// sections which are no longer part of the list are dropped.
+		final Map<ListSectionProxy, ListItemProxy> newSectionPlaceholders = new HashMap<>();
 		for (final ListSectionProxy section : this.proxy.getSections()) {
 			final KrollDict sectionProperties = section.getProperties();
 			final List<ListItemProxy> sectionItems = section.getListItems();
@@ -754,7 +771,8 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 
 			// Allow header and footer to show when no items are present.
 			if ((sectionHasHeader || sectionHasFooter) && sectionItems.size() == 0) {
-				final ListItemProxy item = new ListItemProxy(true);
+				final ListItemProxy item = obtainPlaceholder(this.sectionPlaceholders.get(section));
+				newSectionPlaceholders.put(section, item);
 
 				// Add a placeholder item that will display the section header/footer.
 				item.getProperties().put(TiC.PROPERTY_HEADER_TITLE,
@@ -770,10 +788,12 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 				this.items.add(item);
 			}
 		}
+		this.sectionPlaceholders = newSectionPlaceholders;
 
 		// Add placeholder item for ListView footer.
 		if (hasFooter) {
-			final ListItemProxy item = new ListItemProxy(true);
+			final ListItemProxy item = obtainPlaceholder(this.footerPlaceholder);
+			this.footerPlaceholder = item;
 
 			item.getProperties().put(TiC.PROPERTY_FOOTER_TITLE, properties.get(TiC.PROPERTY_FOOTER_TITLE));
 			item.getProperties().put(TiC.PROPERTY_FOOTER_VIEW, properties.get(TiC.PROPERTY_FOOTER_VIEW));
@@ -787,7 +807,23 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 			this.proxy.fireEvent(TiC.EVENT_NO_RESULTS, null);
 		}
 
-		Parcelable recyclerViewState = recyclerView.getLayoutManager().onSaveInstanceState();
+		// Determine whether this particular update is allowed to animate its row mutations.
+		// Forced updates go through notifyDataSetChanged(), which can never animate. The first
+		// update would otherwise animate the entire list into view, and while an item is being
+		// dragged the ItemTouchHelper is already animating the rows itself.
+		final boolean animating = this.animateRows && !force && !firstUpdate && !this.proxy.isMovingItem();
+		final RecyclerView.ItemAnimator animator = animating ? this.rowItemAnimator : null;
+
+		// Only swap the animator when it actually changes. Re-assigning the same instance ends the
+		// animations it still has in flight, which would cut back-to-back mutations short instead
+		// of letting the animator batch them.
+		if (this.recyclerView.getItemAnimator() != animator) {
+			this.recyclerView.setItemAnimator(animator);
+		}
+
+		// Saving and restoring the layout state forces a re-layout, which cancels any animation
+		// the diff below is about to start. Only do it when this update does not animate.
+		final Parcelable recyclerViewState = animating ? null : recyclerView.getLayoutManager().onSaveInstanceState();
 
 		// Notify adapter of changes on UI thread.
 		this.adapter.update(this.items, force);
@@ -809,7 +845,8 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 			@Override
 			public void run()
 			{
-				if (previousFocus != null) {
+				// Re-focusing also triggers a re-layout, so skip it while rows are animating.
+				if (!animating && previousFocus != null) {
 					final View currentFocus = activity != null ? activity.getCurrentFocus() : null;
 
 					if (currentFocus != previousFocus) {
@@ -838,7 +875,9 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 					}
 				}
 
-				recyclerView.getLayoutManager().onRestoreInstanceState(recyclerViewState);
+				if (recyclerViewState != null) {
+					recyclerView.getLayoutManager().onRestoreInstanceState(recyclerViewState);
+				}
 			}
 		});
 	}
@@ -851,6 +890,56 @@ public class TiListView extends TiSwipeRefreshLayout implements OnSearchChangeLi
 	public void setForceUpdates(boolean value)
 	{
 		forceUpdate = value;
+	}
+
+	/**
+	 * Enable or disable animated row mutations.
+	 *
+	 * @param value Set true to animate row inserts, deletes and moves.
+	 */
+	public void setAnimateRows(boolean value)
+	{
+		if (this.animateRows == value) {
+			return;
+		}
+		this.animateRows = value;
+
+		if (value) {
+			if (this.rowItemAnimator == null) {
+				final DefaultItemAnimator animator = new DefaultItemAnimator();
+
+				// Titanium mutates item proxies in place, so a change animation would cross-fade a
+				// row with itself. Only structural changes are animated.
+				animator.setSupportsChangeAnimations(false);
+				this.rowItemAnimator = animator;
+			}
+		} else {
+
+			// Detach the animator and stop reusing placeholders, restoring the legacy behavior.
+			this.recyclerView.setItemAnimator(null);
+			this.headerPlaceholder = null;
+			this.footerPlaceholder = null;
+			this.sectionPlaceholders.clear();
+		}
+	}
+
+	/**
+	 * Obtain a placeholder item used to render a header or footer.
+	 * <p/>
+	 * When row animations are enabled the placeholder instance has to be stable across updates.
+	 * DiffUtil identifies items by instance, so a freshly created placeholder would be diffed as a
+	 * removal followed by an insertion, animating the header/footer out and back in on every single
+	 * row mutation. When animations are disabled a new placeholder is created, as before.
+	 *
+	 * @param cached Placeholder used by the previous update, may be null.
+	 * @return ListItemProxy to populate and add to the adapter list.
+	 */
+	private ListItemProxy obtainPlaceholder(ListItemProxy cached)
+	{
+		if (this.animateRows && cached != null) {
+			return cached;
+		}
+		return new ListItemProxy(true);
 	}
 
 	public void update()

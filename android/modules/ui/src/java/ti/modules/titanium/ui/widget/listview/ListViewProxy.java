@@ -220,6 +220,16 @@ public class ListViewProxy extends RecyclerViewProxy
 	}
 
 	/**
+	 * Determine if an item is currently being dragged to a new position.
+	 *
+	 * @return Returns true while a drag-and-drop item movement is in progress.
+	 */
+	public boolean isMovingItem()
+	{
+		return this.moveEventInfo.isMoving();
+	}
+
+	/**
 	 * Called when item drag-and-drop movement is about to start.
 	 *
 	 * @param adapterIndex Index of item in adapter that is about to be moved.
@@ -563,6 +573,11 @@ public class ListViewProxy extends RecyclerViewProxy
 			final TiListView listView = getListView();
 			if (listView != null) {
 				listView.setForceUpdates(TiConvert.toBoolean(value, false));
+			}
+		} else if (name.equals(TiListView.PROPERTY_ANIMATE_ROWS)) {
+			final TiListView listView = getListView();
+			if (listView != null) {
+				listView.setAnimateRows(TiConvert.toBoolean(value, false));
 			}
 		}
 	}

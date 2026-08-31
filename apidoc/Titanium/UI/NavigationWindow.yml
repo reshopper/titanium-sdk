@@ -121,7 +121,7 @@ methods:
     since: "12.7.0"
     returns:
         summary: A Promise that resolves when the window has been inserted.
-        type: Promise<void>
+        type: Promise<any>
     parameters:
       - name: window
         summary: Window to insert into the navigation stack.
