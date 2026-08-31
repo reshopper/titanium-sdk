@@ -169,6 +169,63 @@ describe('Titanium.UI.ListView', function () {
 			should(listView.fastScroll).be.false();
 		});
 
+		describe.android('.animateRows', () => {
+			it('is off unless opted in', () => {
+				const listView = Ti.UI.createListView();
+				should(listView.animateRows).not.be.true();
+			});
+
+			it('is settable at creation and after', () => {
+				const listView = Ti.UI.createListView({ animateRows: true });
+				should(listView.animateRows).be.true();
+				listView.animateRows = false;
+				should(listView.animateRows).be.false();
+			});
+
+			// Row animations run off a DiffUtil pass over the adapter. Walk a rendered list through
+			// an append, an insert and a delete to make sure the section contents stay in sync with
+			// what was asked for while the animations are in flight.
+			it('keeps section contents in sync while animating', function (finish) {
+				this.slow(5000);
+				this.timeout(20000);
+
+				const section = Ti.UI.createListSection({
+					headerTitle: 'Animated',
+					items: [
+						{ properties: { title: 'Apple' } },
+						{ properties: { title: 'Banana' } }
+					]
+				});
+				const listView = Ti.UI.createListView({
+					animateRows: true,
+					sections: [ section ]
+				});
+
+				win = Ti.UI.createWindow({ backgroundColor: 'white' });
+				win.addEventListener('open', () => {
+					try {
+						section.appendItems([ { properties: { title: 'Cherry' } } ]);
+						should(section.items.length).be.eql(3);
+
+						section.insertItemsAt(0, [ { properties: { title: 'Apricot' } } ]);
+						should(section.items.length).be.eql(4);
+
+						// Removes 'Apple' and 'Banana', leaving the inserted and appended rows.
+						section.deleteItemsAt(1, 2);
+						should(section.items.length).be.eql(2);
+						should(section.getItemAt(0).properties.title).be.eql('Apricot');
+						should(section.getItemAt(1).properties.title).be.eql('Cherry');
+					} catch (err) {
+						return finish(err);
+					}
+					finish();
+				});
+
+				win.add(listView);
+				win.open();
+			});
+		});
+
 		/**
 		 * Validate ListSection header and footer properties.
 		 */
