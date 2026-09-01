@@ -1016,28 +1016,6 @@ properties:
     type: Padding
     since: "12.8.0"
 
-  - name: animateRows
-    summary: Determines if row mutations are animated.
-    description: |
-        When set to `true`, rows added, removed or moved via the
-        <Titanium.UI.ListSection> methods are animated in and out of the list instead of
-        appearing instantly.
-
-        Only structural changes are animated. Updating the content of an existing row
-        re-binds it without a cross-fade, since the underlying item is mutated in place.
-
-        Animations are skipped for the first update of a list, while an item is being
-        dragged to a new position, and for updates which have to rebuild the whole list
-        (such as filtering through [searchText](Titanium.UI.ListView.searchText) or
-        toggling [showSelectionCheck](Titanium.UI.ListView.showSelectionCheck)).
-
-        On iOS, pass the `animation` parameter to the <Titanium.UI.ListSection> methods
-        instead.
-    type: Boolean
-    default: false
-    platforms: [android]
-    since: 13.8.0
-
   - name: forceUpdates
     summary: Optimize the `continuousUpdate` scrolling event.
     description: |
