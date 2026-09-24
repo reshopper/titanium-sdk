@@ -1486,7 +1486,7 @@ extern void UIColorFlushCache(void);
   }
   [[NSNotificationCenter defaultCenter] postNotificationName:kTiSuspendNotification object:self];
 
-  [[ImageLoader sharedLoader] suspend];
+  [[TiImageLoader sharedLoader] suspend];
   [kjsBridge gc];
 }
 
@@ -1508,7 +1508,7 @@ extern void UIColorFlushCache(void);
 
   [[NSNotificationCenter defaultCenter] postNotificationName:kTiResumedNotification object:self];
 
-  [[ImageLoader sharedLoader] resume];
+  [[TiImageLoader sharedLoader] resume];
 }
 
 - (void)sceneDidEnterBackground:(UIScene *)scene
