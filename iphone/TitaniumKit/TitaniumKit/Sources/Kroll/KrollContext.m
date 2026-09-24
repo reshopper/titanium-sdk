@@ -597,6 +597,7 @@ static JSValueRef StringFormatDecimalCallback(JSContextRef jsContext, JSObjectRe
     pthread_mutexattr_init(&entryLockAttrs);
     pthread_mutexattr_settype(&entryLockAttrs, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&KrollEntryLock, &entryLockAttrs);
+    pthread_mutexattr_destroy(&entryLockAttrs);
   }
 }
 

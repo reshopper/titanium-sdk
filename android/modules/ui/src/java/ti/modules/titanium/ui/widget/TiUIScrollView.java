@@ -7,7 +7,6 @@
 package ti.modules.titanium.ui.widget;
 
 import android.content.Context;
-import android.graphics.Canvas;
 import androidx.core.widget.NestedScrollView;
 import android.util.AttributeSet;
 import android.util.Xml;
@@ -18,6 +17,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
+import android.os.SystemClock;
 import android.widget.HorizontalScrollView;
 import android.animation.ValueAnimator;
 import android.view.animation.DecelerateInterpolator;
@@ -50,6 +50,7 @@ public class TiUIScrollView extends TiUIView
 
 	private View scrollView;
 	private ValueAnimator scrollAnimator;
+	private TiSwipeRefreshLayout swipeRefreshLayout;
 	private TiDimension offsetX = new TiDimension(0, TiDimension.TYPE_LEFT);
 	private TiDimension offsetY = new TiDimension(0, TiDimension.TYPE_TOP);
 	private boolean setInitialOffset = false;
@@ -63,6 +64,16 @@ public class TiUIScrollView extends TiUIView
 	private int edgeFadeBottom = 0;
 	private int edgeFadeLeft = 0;
 	private int edgeFadeRight = 0;
+
+	// Scroll event throttling (~60fps)
+	private static final int SCROLL_EVENT_THROTTLE_MS = 16;
+	private long lastScrollEventTime = 0;
+	private int cachedOffsetX = 0;
+	private int cachedOffsetY = 0;
+	private int cachedContentWidth = -1;
+	private int cachedContentHeight = -1;
+	private double cachedContentSizeWidth = 0;
+	private double cachedContentSizeHeight = 0;
 
 	private static int verticalAttrId = -1;
 	private static int horizontalAttrId = -1;
@@ -78,6 +89,12 @@ public class TiUIScrollView extends TiUIView
 		private boolean canCancelEvents = true;
 		private GestureDetector gestureDetector;
 		private boolean wasMeasured;
+
+		// Cached content property values to avoid repeated proxy lookups per measure pass
+		private int cachedContentWidthValue = AUTO;
+		private int cachedContentHeightValue = AUTO;
+		private boolean contentWidthCached = false;
+		private boolean contentHeightCached = false;
 
 		public TiScrollViewLayout(Context context, LayoutArrangement arrangement)
 		{
@@ -230,15 +247,24 @@ public class TiUIScrollView extends TiUIView
 
 		private int getContentProperty(String property)
 		{
+			// Return cached value if available
+			if (TiC.PROPERTY_CONTENT_WIDTH.equals(property) && contentWidthCached) {
+				return cachedContentWidthValue;
+			}
+			if (TiC.PROPERTY_CONTENT_HEIGHT.equals(property) && contentHeightCached) {
+				return cachedContentHeightValue;
+			}
+
+			int result = AUTO;
 			Object value = getProxy().getProperty(property);
 			if (value != null) {
 				if (value.equals(TiC.SIZE_AUTO) || value.equals(TiC.LAYOUT_SIZE)) {
-					return AUTO;
+					result = AUTO;
 				} else if (value.equals(TiC.LAYOUT_FILL)) {
 					if (TiC.PROPERTY_CONTENT_HEIGHT.equals(property)) {
-						return this.parentContentHeight;
+						result = this.parentContentHeight;
 					} else if (TiC.PROPERTY_CONTENT_WIDTH.equals(property)) {
-						return this.parentContentWidth;
+						result = this.parentContentWidth;
 					}
 				} else if (value instanceof Number) {
 					int type = TiDimension.TYPE_UNDEFINED;
@@ -249,9 +275,8 @@ public class TiUIScrollView extends TiUIView
 					}
 					TiDimension dimension = TiConvert.toTiDimension(value, type);
 					if (dimension != null) {
-						return dimension.getAsPixels(this);
+						result = dimension.getAsPixels(this);
 					}
-					return AUTO;
 				} else {
 					int type = 0;
 					TiDimension dimension;
@@ -261,10 +286,26 @@ public class TiUIScrollView extends TiUIView
 						type = TiDimension.TYPE_WIDTH;
 					}
 					dimension = new TiDimension(value.toString(), type);
-					return dimension.getUnits() == TiDimension.COMPLEX_UNIT_AUTO ? AUTO : dimension.getIntValue();
+					result = dimension.getUnits() == TiDimension.COMPLEX_UNIT_AUTO ? AUTO : dimension.getIntValue();
 				}
 			}
-			return AUTO;
+
+			// Cache the result
+			if (TiC.PROPERTY_CONTENT_WIDTH.equals(property)) {
+				cachedContentWidthValue = result;
+				contentWidthCached = true;
+			} else if (TiC.PROPERTY_CONTENT_HEIGHT.equals(property)) {
+				cachedContentHeightValue = result;
+				contentHeightCached = true;
+			}
+
+			return result;
+		}
+
+		public void invalidateContentPropertyCache()
+		{
+			contentWidthCached = false;
+			contentHeightCached = false;
 		}
 
 		@Override
@@ -340,6 +381,9 @@ public class TiUIScrollView extends TiUIView
 		{
 			// Flag that the onMeasure() method has been called.
 			this.wasMeasured = true;
+
+			// Invalidate content property cache for this measure pass
+			invalidateContentPropertyCache();
 
 			// Apply the "contentWidth" and "contentHeight" sizes to the child instead, if provided.
 			int contentWidth = getContentProperty(TiC.PROPERTY_CONTENT_WIDTH);
@@ -492,10 +536,12 @@ public class TiUIScrollView extends TiUIView
 			}
 		}
 
-		public void onDraw(Canvas canvas)
+		@Override
+		protected void onLayout(boolean changed, int l, int t, int r, int b)
 		{
-			super.onDraw(canvas);
-			// setting offset once when this view is visible
+			super.onLayout(changed, l, t, r, b);
+			// Set initial content offset in onLayout instead of onDraw for earlier pipeline application.
+			// This avoids a visible jump from (0,0) to the offset position on first draw.
 			if (!setInitialOffset) {
 				scrollTo(offsetX.getAsPixels(scrollView), offsetY.getAsPixels(scrollView));
 				setInitialOffset = true;
@@ -525,6 +571,9 @@ public class TiUIScrollView extends TiUIView
 		protected void onScrollChanged(int l, int t, int oldl, int oldt)
 		{
 			super.onScrollChanged(l, t, oldl, oldt);
+
+			// Always fire dragstart immediately - must not be throttled,
+			// otherwise the matching dragend (gated on isScrolling) is also lost.
 			if (!isScrolling && isTouching) {
 				isScrolling = true;
 				KrollDict data = new KrollDict();
@@ -532,6 +581,13 @@ public class TiUIScrollView extends TiUIView
 				data.put(TiC.EVENT_PROPERTY_Y, yDimension.getAsDefault(scrollView));
 				getProxy().fireEvent(TiC.EVENT_DRAGSTART, data);
 			}
+
+			// Throttle scroll events to ~60fps
+			long currentTime = SystemClock.elapsedRealtime();
+			if ((currentTime - lastScrollEventTime) < SCROLL_EVENT_THROTTLE_MS) {
+				return;
+			}
+			lastScrollEventTime = currentTime;
 
 			setContentOffset(l, t);
 
@@ -673,10 +729,11 @@ public class TiUIScrollView extends TiUIView
 			return false;
 		}
 
-		public void onDraw(Canvas canvas)
+		@Override
+		protected void onLayout(boolean changed, int l, int t, int r, int b)
 		{
-			super.onDraw(canvas);
-			// setting offset once this view is visible
+			super.onLayout(changed, l, t, r, b);
+			// Set initial content offset in onLayout instead of onDraw for earlier pipeline application.
 			if (!setInitialOffset) {
 				scrollTo(offsetX.getAsPixels(scrollView), offsetY.getAsPixels(scrollView));
 				setInitialOffset = true;
@@ -706,18 +763,27 @@ public class TiUIScrollView extends TiUIView
 		protected void onScrollChanged(int l, int t, int oldl, int oldt)
 		{
 			super.onScrollChanged(l, t, oldl, oldt);
-			KrollDict data = new KrollDict();
 
+			// Always fire dragstart immediately - must not be throttled,
+			// otherwise the matching dragend (gated on isScrolling) is also lost.
 			if (!isScrolling && isTouching) {
 				isScrolling = true;
+				KrollDict data = new KrollDict();
 				data.put(TiC.EVENT_PROPERTY_X, xDimension.getAsDefault(scrollView));
 				data.put(TiC.EVENT_PROPERTY_Y, yDimension.getAsDefault(scrollView));
 				getProxy().fireEvent(TiC.EVENT_DRAGSTART, data);
 			}
 
+			// Throttle scroll events to ~60fps
+			long currentTime = SystemClock.elapsedRealtime();
+			if ((currentTime - lastScrollEventTime) < SCROLL_EVENT_THROTTLE_MS) {
+				return;
+			}
+			lastScrollEventTime = currentTime;
+
 			setContentOffset(l, t);
 
-			data = new KrollDict();
+			KrollDict data = new KrollDict();
 			data.put(TiC.EVENT_PROPERTY_X, offsetX.getAsDefault(scrollView));
 			data.put(TiC.EVENT_PROPERTY_Y, offsetY.getAsDefault(scrollView));
 			data.put(TiC.PROPERTY_CONTENT_SIZE, contentSize());
@@ -1093,7 +1159,13 @@ public class TiUIScrollView extends TiUIView
 			Log.d(TAG, "Property: " + key + " old: " + oldValue + " new: " + newValue, Log.DEBUG_MODE);
 		}
 
-		if (key.equals(TiC.PROPERTY_CONTENT_OFFSET)) {
+		if (key.equals(TiC.PROPERTY_CONTENT_WIDTH) || key.equals(TiC.PROPERTY_CONTENT_HEIGHT)) {
+			// Invalidate content property cache when these properties change
+			TiScrollViewLayout layout = getLayout();
+			if (layout != null) {
+				layout.invalidateContentPropertyCache();
+			}
+		} else if (key.equals(TiC.PROPERTY_CONTENT_OFFSET)) {
 			setContentOffset(newValue);
 			scrollTo((int) offsetX.getAsDefault(scrollView), (int) offsetY.getAsDefault(scrollView), false);
 		} else if (key.equals(TiC.PROPERTY_CAN_CANCEL_EVENTS)) {
@@ -1109,17 +1181,23 @@ public class TiUIScrollView extends TiUIView
 		} else if (TiC.PROPERTY_SCROLLING_ENABLED.equals(key)) {
 			setScrollingEnabled(newValue);
 		} else if (TiC.PROPERTY_REFRESH_CONTROL.equals(key)) {
-			View nativeView = getNativeView();
-			if (nativeView instanceof TiSwipeRefreshLayout) {
+			if (this.swipeRefreshLayout != null) {
 				if (newValue == null) {
-					RefreshControlProxy.unassignFrom((TiSwipeRefreshLayout) nativeView);
+					RefreshControlProxy.unassignFrom(this.swipeRefreshLayout);
 				} else if (newValue instanceof RefreshControlProxy) {
-					((RefreshControlProxy) newValue).assignTo((TiSwipeRefreshLayout) nativeView);
+					((RefreshControlProxy) newValue).assignTo(this.swipeRefreshLayout);
 				} else {
 					Log.e(TAG, "Invalid value assigned to property '" + key + "'. Must be of type 'RefreshControl'.");
 				}
+			} else if (newValue instanceof RefreshControlProxy) {
+				// Lazily create SwipeRefreshLayout wrapper when refreshControl is set dynamically
+				this.swipeRefreshLayout = createSwipeRefreshLayout();
+				this.swipeRefreshLayout.setSwipeRefreshEnabled(false);
+				this.swipeRefreshLayout.addView(this.scrollView);
+				((RefreshControlProxy) newValue).assignTo(this.swipeRefreshLayout);
+				setNativeView(this.swipeRefreshLayout);
 			} else {
-				Log.e(TAG, "ScrollView failed to obtain reference to 'TiSwipeRefreshLayout' object.");
+				Log.e(TAG, "Invalid value assigned to property '" + key + "'. Must be of type 'RefreshControl'.");
 			}
 		} else if (TiC.PROPERTY_OVER_SCROLL_MODE.equals(key)) {
 			if (this.scrollView != null) {
@@ -1130,6 +1208,51 @@ public class TiUIScrollView extends TiUIView
 		}
 
 		super.propertyChanged(key, oldValue, newValue, proxy);
+	}
+
+	/**
+	 * Creates a TiSwipeRefreshLayout wrapper with overridden click/long-click delegation
+	 * to the scroll view layout, matching the existing behavior.
+	 */
+	private TiSwipeRefreshLayout createSwipeRefreshLayout()
+	{
+		return new TiSwipeRefreshLayout(getProxy().getActivity()) {
+			@Override
+			public void setClickable(boolean value)
+			{
+				View view = getLayout();
+				if (view != null) {
+					view.setClickable(value);
+				}
+			}
+
+			@Override
+			public void setLongClickable(boolean value)
+			{
+				View view = getLayout();
+				if (view != null) {
+					view.setLongClickable(value);
+				}
+			}
+
+			@Override
+			public void setOnClickListener(View.OnClickListener listener)
+			{
+				View view = getLayout();
+				if (view != null) {
+					view.setOnClickListener(listener);
+				}
+			}
+
+			@Override
+			public void setOnLongClickListener(View.OnLongClickListener listener)
+			{
+				View view = getLayout();
+				if (view != null) {
+					view.setOnLongClickListener(listener);
+				}
+			}
+		};
 	}
 
 	@Override
@@ -1246,52 +1369,20 @@ public class TiUIScrollView extends TiUIView
 		}
 
 		// Set up the swipe refresh layout container which wraps the scroll view.
-		TiSwipeRefreshLayout swipeRefreshLayout = new TiSwipeRefreshLayout(getProxy().getActivity()) {
-			@Override
-			public void setClickable(boolean value)
-			{
-				View view = getLayout();
-				if (view != null) {
-					view.setClickable(value);
-				}
-			}
-
-			@Override
-			public void setLongClickable(boolean value)
-			{
-				View view = getLayout();
-				if (view != null) {
-					view.setLongClickable(value);
-				}
-			}
-
-			@Override
-			public void setOnClickListener(View.OnClickListener listener)
-			{
-				View view = getLayout();
-				if (view != null) {
-					view.setOnClickListener(listener);
-				}
-			}
-
-			@Override
-			public void setOnLongClickListener(View.OnLongClickListener listener)
-			{
-				View view = getLayout();
-				if (view != null) {
-					view.setOnLongClickListener(listener);
-				}
-			}
-		};
-		swipeRefreshLayout.setSwipeRefreshEnabled(false);
-		swipeRefreshLayout.addView(this.scrollView);
+		// Only create the wrapper if refreshControl is set, avoiding an extra ViewGroup layer.
 		if (d.containsKey(TiC.PROPERTY_REFRESH_CONTROL)) {
+			this.swipeRefreshLayout = createSwipeRefreshLayout();
+			this.swipeRefreshLayout.setSwipeRefreshEnabled(false);
+			this.swipeRefreshLayout.addView(this.scrollView);
 			Object object = d.get(TiC.PROPERTY_REFRESH_CONTROL);
 			if (object instanceof RefreshControlProxy) {
-				((RefreshControlProxy) object).assignTo(swipeRefreshLayout);
+				((RefreshControlProxy) object).assignTo(this.swipeRefreshLayout);
 			}
+			setNativeView(this.swipeRefreshLayout);
+		} else {
+			this.swipeRefreshLayout = null;
+			setNativeView(this.scrollView);
 		}
-		setNativeView(swipeRefreshLayout);
 
 		this.scrollView.setHorizontalScrollBarEnabled(showHorizontalScrollBar);
 		this.scrollView.setVerticalScrollBarEnabled(showVerticalScrollBar);
@@ -1378,14 +1469,10 @@ public class TiUIScrollView extends TiUIView
 		x = TiConvert.toTiDimension(x, -1).getAsPixels(view);
 		y = TiConvert.toTiDimension(y, -1).getAsPixels(view);
 
-		// Disable smooth scrolling for vertical scroll views if not at top of view.
-		// Note: This works-around a bug in Google's NestedScrollView where attempting to
-		//       smooth scrolls will move to a totally different position or opposite directions.
-		if (smoothScroll && (view instanceof TiVerticalScrollView)) {
-			if (((TiVerticalScrollView) view).getScrollY() > 0) {
-				smoothScroll = false;
-			}
-		}
+		// Note: A previous workaround disabled smooth scrolling when getScrollY() > 0
+		// due to a NestedScrollView bug where smoothScrollTo() moved to the wrong position.
+		// This bug was fixed in AndroidX (Support Library 28.0.0 / androidx.core:core:1.0.0+),
+		// so the workaround is no longer needed.
 
 		// Scroll to the given position.
 		if (smoothScroll) {
@@ -1550,23 +1637,13 @@ public class TiUIScrollView extends TiUIView
 			// Scroll to the left-most side of the horizontal scroll view.
 			((TiHorizontalScrollView) view).fullScroll(View.FOCUS_LEFT);
 		} else if (view instanceof TiVerticalScrollView) {
-			if (animated == false) {
-				// Scroll to the top of the vertical scroll view.
-				// Note: There is a bug in Google's NestedScrollView where smooth scrolling to top fails
-				//       and can scroll down instead. We must work-around it by temporarily disabling it.
-				TiVerticalScrollView verticalScrollView = (TiVerticalScrollView) view;
-				boolean wasEnabled = verticalScrollView.isSmoothScrollingEnabled();
-				verticalScrollView.setSmoothScrollingEnabled(false);
-				try {
-					((TiVerticalScrollView) view).fullScroll(View.FOCUS_UP);
-				} finally {
-					verticalScrollView.setSmoothScrollingEnabled(wasEnabled);
-				}
+			if (animated) {
+				// Note: Previous workaround disabled smooth scrolling due to a NestedScrollView bug.
+				// This bug was fixed in AndroidX (Support Library 28.0.0+), so smoothScrollTo works correctly.
+				((TiVerticalScrollView) view).smoothScrollTo(0, 0);
 			} else {
-				NestedScrollView nestedScrollView = ((TiVerticalScrollView) view);
-				nestedScrollView.smoothScrollBy(0, -nestedScrollView.getChildAt(0).getHeight());
+				((TiVerticalScrollView) view).fullScroll(View.FOCUS_UP);
 			}
-
 		}
 	}
 
@@ -1574,27 +1651,33 @@ public class TiUIScrollView extends TiUIView
 	{
 		// Guard against null layout during teardown (eg. after release()).
 		TiScrollViewLayout layout = getLayout();
-		int measuredWidth = 0;
-		int measuredHeight = 0;
+		int width = 0;
+		int height = 0;
 		if (layout != null) {
-			measuredWidth = layout.getMeasuredWidth();
-			measuredHeight = layout.getMeasuredHeight();
+			width = layout.getMeasuredWidth();
+			height = layout.getMeasuredHeight();
 		} else {
 			// Fallback to native view if available; otherwise default to 0.
 			View nativeView = getNativeView();
 			if (nativeView != null) {
-				measuredWidth = nativeView.getMeasuredWidth();
-				measuredHeight = nativeView.getMeasuredHeight();
+				width = nativeView.getMeasuredWidth();
+				height = nativeView.getMeasuredHeight();
 			}
 		}
-		TiDimension dimensionWidth = new TiDimension(measuredWidth, TiDimension.TYPE_WIDTH);
-		TiDimension dimensionHeight = new TiDimension(measuredHeight, TiDimension.TYPE_HEIGHT);
-		double contentWidth = dimensionWidth.getAsDefault(getNativeView());
-		double contentHeight = dimensionHeight.getAsDefault(getNativeView());
+
+		// Only recalculate TiDimension values if content size changed
+		if (width != cachedContentWidth || height != cachedContentHeight) {
+			cachedContentWidth = width;
+			cachedContentHeight = height;
+			TiDimension dimensionWidth = new TiDimension(width, TiDimension.TYPE_WIDTH);
+			TiDimension dimensionHeight = new TiDimension(height, TiDimension.TYPE_HEIGHT);
+			cachedContentSizeWidth = dimensionWidth.getAsDefault(getNativeView());
+			cachedContentSizeHeight = dimensionHeight.getAsDefault(getNativeView());
+		}
 
 		KrollDict contentData = new KrollDict();
-		contentData.put(TiC.PROPERTY_WIDTH, contentWidth);
-		contentData.put(TiC.PROPERTY_HEIGHT, contentHeight);
+		contentData.put(TiC.PROPERTY_WIDTH, cachedContentSizeWidth);
+		contentData.put(TiC.PROPERTY_HEIGHT, cachedContentSizeHeight);
 		return contentData;
 	}
 
