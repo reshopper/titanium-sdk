@@ -1499,6 +1499,13 @@ public abstract class TiUIView implements KrollProxyListener, OnFocusChangeListe
 			children.clear();
 			children = null;
 		}
+		// Clear detector to prevent memory leak
+		detector = null;
+		// Clear touchView WeakReference to prevent memory leak
+		if (touchView != null) {
+			touchView.clear();
+			touchView = null;
+		}
 		proxy = null;
 		layoutParams = null;
 	}

@@ -25,7 +25,7 @@ import { ProcessSplashesTask } from '../lib/process-splashes-task.js';
 import Color from '../../../common/lib/color.js';
 import { ProcessCSSTask } from '../../../cli/lib/tasks/process-css-task.js';
 import { CopyResourcesTask } from '../../../cli/lib/tasks/copy-resources-task.js';
-import { DOMParser } from 'xmldom';
+import { DOMParser } from '@xmldom/xmldom';
 import ejs from 'ejs';
 import EmulatorManager from 'node-titanium-sdk/lib/emulator.js';
 import fields from 'fields';
@@ -37,7 +37,7 @@ import ti from 'node-titanium-sdk';
 import tiappxml from 'node-titanium-sdk/lib/tiappxml.js';
 import util from 'node:util';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadPackageJson } from '../../../cli/lib/pkginfo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -2159,8 +2159,7 @@ class AndroidBuilder extends Builder {
 		}
 
 		// Add a reference to the core Titanium library.
-		const tiMavenRepoUrl = 'file://' + path.join(this.platformPath, 'm2repository').replace(/\\/g, '/');
-		this.mavenRepositoryUrls.push(encodeURI(tiMavenRepoUrl));
+		this.mavenRepositoryUrls.push(pathToFileURL(path.join(this.platformPath, 'm2repository')).href);
 		this.libDependencyStrings.push(`org.appcelerator:titanium:${this.titaniumSdkVersion}`);
 
 		// Process all Titanium modules referenced by the Titanium project.
@@ -2196,8 +2195,7 @@ class AndroidBuilder extends Builder {
 			if (repositoryDirPath && dependencyString) {
 				// Referenced module has a Maven repository.
 				// This supports dependency management to avoid library version conflicts.
-				const url = 'file://' + repositoryDirPath.replace(/\\/g, '/');
-				this.mavenRepositoryUrls.push(encodeURI(url));
+				this.mavenRepositoryUrls.push(pathToFileURL(repositoryDirPath).href);
 				this.libDependencyStrings.push(dependencyString);
 			} else {
 				// Module directory only contains JARs/AARs. (This is our legacy module distribution.)
@@ -2226,6 +2224,8 @@ class AndroidBuilder extends Builder {
 		gradleProperties.push({ key: 'android.nonTransitiveRClass', value: 'false' });
 		gradleProperties.push({ key: 'org.gradle.jvmargs', value: `-Xmx${this.javacMaxMemory}` });
 		gradleProperties.push({ key: 'org.gradle.configuration-cache', value: 'true' });
+		gradleProperties.push({ key: 'android.builtInKotlin', value: 'false' });
+		gradleProperties.push({ key: 'android.newDsl', value: 'false' });
 		await gradlew.writeGradlePropertiesFile(gradleProperties);
 
 		// Copy optional "gradle.properties" file contents from Titanium project to the above generated file.

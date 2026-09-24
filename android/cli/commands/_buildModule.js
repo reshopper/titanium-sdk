@@ -27,7 +27,7 @@ import tiappxml from 'node-titanium-sdk/lib/tiappxml.js';
 import util from 'node:util';
 import semver from 'semver';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const version = appc.version;
 
@@ -523,6 +523,8 @@ export class AndroidModuleBuilder extends Builder {
 		gradleProperties.push({ key: 'android.useAndroidX', value: 'true' });
 		gradleProperties.push({ key: 'android.suppressUnsupportedCompileSdk', value: '35' });
 		gradleProperties.push({ key: 'android.nonTransitiveRClass', value: 'false' });
+		gradleProperties.push({ key: 'android.builtInKotlin', value: 'false' });
+		gradleProperties.push({ key: 'android.newDsl', value: 'false' });
 		gradleProperties.push({
 			key: 'org.gradle.jvmargs',
 			value: `-Xmx${this.javacMaxMemory} -Dkotlin.daemon.jvm.options="-Xmx${this.javacMaxMemory}"`
@@ -605,7 +607,7 @@ export class AndroidModuleBuilder extends Builder {
 			moduleMinSdkVersion: this.manifest.minsdk,
 			moduleArchitectures: this.manifest.architectures.split(' '),
 			tiBindingsJsonPath: path.join(this.platformPath, 'titanium.bindings.json'),
-			tiMavenUrl: encodeURI('file://' + path.join(this.platformPath, 'm2repository').replace(/\\/g, '/')),
+			tiMavenUrl: pathToFileURL(path.join(this.platformPath, 'm2repository')).href,
 			tiSdkModuleTemplateDir: this.moduleTemplateDir,
 			tiSdkVersion: this.titaniumSdkVersion
 		});
