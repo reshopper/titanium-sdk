@@ -989,9 +989,11 @@ public class TiUIScrollView extends TiUIView
 
 				view.setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom);
 
-				// Set clipChildren to false to prevent content clipping when using insets
+				// Let content scroll into the inset (padding) area, but keep it clipped to the scroll
+				// view's own bounds. The scroll view is no longer always wrapped in a clipping
+				// TiSwipeRefreshLayout, so disabling clipChildren here would let content draw beyond
+				// its edges (over sibling views and past the "edgeFade" gradient).
 				if (view instanceof ViewGroup) {
-					((ViewGroup) view).setClipChildren(false);
 					((ViewGroup) view).setClipToPadding(false);
 				}
 
