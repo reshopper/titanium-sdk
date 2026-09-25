@@ -7,6 +7,7 @@
 package ti.modules.titanium.ui.widget;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import androidx.core.widget.NestedScrollView;
 import android.util.AttributeSet;
 import android.util.Xml;
@@ -548,6 +549,15 @@ public class TiUIScrollView extends TiUIView
 			}
 		}
 
+		/** Overridden to always clip the content to the visible viewport. See clipToViewport(). */
+		@Override
+		protected void dispatchDraw(Canvas canvas)
+		{
+			int saveCount = clipToViewport(this, canvas);
+			super.dispatchDraw(canvas);
+			canvas.restoreToCount(saveCount);
+		}
+
 		/** Overridden to give the top edge its own "edgeFade" length, independent of the bottom. */
 		@Override
 		protected float getTopFadingEdgeStrength()
@@ -738,6 +748,15 @@ public class TiUIScrollView extends TiUIView
 				scrollTo(offsetX.getAsPixels(scrollView), offsetY.getAsPixels(scrollView));
 				setInitialOffset = true;
 			}
+		}
+
+		/** Overridden to always clip the content to the visible viewport. See clipToViewport(). */
+		@Override
+		protected void dispatchDraw(Canvas canvas)
+		{
+			int saveCount = clipToViewport(this, canvas);
+			super.dispatchDraw(canvas);
+			canvas.restoreToCount(saveCount);
 		}
 
 		/** Overridden to give the left edge its own "edgeFade" length, independent of the right. */
@@ -989,11 +1008,9 @@ public class TiUIScrollView extends TiUIView
 
 				view.setPadding(paddingLeft, paddingTop, paddingRight, paddingBottom);
 
-				// Let content scroll into the inset (padding) area, but keep it clipped to the scroll
-				// view's own bounds. The scroll view is no longer always wrapped in a clipping
-				// TiSwipeRefreshLayout, so disabling clipChildren here would let content draw beyond
-				// its edges (over sibling views and past the "edgeFade" gradient).
+				// Set clipChildren to false to prevent content clipping when using insets
 				if (view instanceof ViewGroup) {
+					((ViewGroup) view).setClipChildren(false);
 					((ViewGroup) view).setClipToPadding(false);
 				}
 
@@ -1019,6 +1036,27 @@ public class TiUIScrollView extends TiUIView
 		} else {
 			Log.e(TAG, "ContentInsets must be an instance of HashMap");
 		}
+	}
+
+	/**
+	 * Clips the given scroll view's content to its visible viewport, including its padding.
+	 * <p>
+	 * A scroll view disables "clipToPadding" when "contentInsets" are set, so it no longer clips its
+	 * content itself. Its viewport is then only clipped if its parent view clips its children, but a
+	 * Titanium parent may have had clipping disabled, such as by a sibling view's "clipMode". The
+	 * content would then draw beyond the scroll view's edges, over sibling views and past the
+	 * "edgeFade" gradient.
+	 * @param view The scroll view to clip. Expected to be called from its dispatchDraw() method.
+	 * @param canvas The canvas the content is drawn to, already translated by the scroll offset.
+	 * @return Returns the canvas save count to be passed to Canvas.restoreToCount().
+	 */
+	private static int clipToViewport(View view, Canvas canvas)
+	{
+		int saveCount = canvas.save();
+		int left = view.getScrollX();
+		int top = view.getScrollY();
+		canvas.clipRect(left, top, left + view.getWidth(), top + view.getHeight());
+		return saveCount;
 	}
 
 	/**
