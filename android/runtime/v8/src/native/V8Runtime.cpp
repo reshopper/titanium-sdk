@@ -5,7 +5,7 @@
  * Please see the LICENSE included with this distribution for details.
  */
 #include <stdio.h>
-#include <cstring>
+#include <list>
 #include <string>
 
 #include <v8-platform.h>
@@ -175,116 +175,139 @@ static void logV8Exception(Local<Message> msg, Local<Value> data)
 		msg->GetSourceLine(context).ToLocalChecked());
 }
 
-void promiseRejectCallback(PromiseRejectMessage message)
+static std::string formatRejectionReason(Isolate* isolate, Local<Context> context, Local<Value> exception)
 {
-	if (message.GetEvent() == kPromiseRejectWithNoHandler) {
-		Isolate* isolate = V8Runtime::v8_isolate;
-		HandleScope scope(isolate);
+	Local<String> exceptionString;
+	std::string header; // e.g. "ErrorName: message"
 
-        Local<Value> exception = message.GetValue();
-        Local<String> exceptionString;
+	if (exception->IsObject()) {
+		Local<Object> obj = exception.As<Object>();
 
-        // Attempt to build a rich error description
-        Local<Context> context = isolate->GetCurrentContext();
-        std::string header; // e.g. "ErrorName: message"
-
-        if (exception->IsObject()) {
-            Local<Object> obj = exception.As<Object>();
-
-            // Prefer a real stack if present
-            Local<Value> stackValue;
-            MaybeLocal<Value> maybeStack = obj->Get(context, STRING_NEW(isolate, "stack"));
-            if (maybeStack.ToLocal(&stackValue) && stackValue->IsString()) {
-                // Try to prepend name and message if available
-                Local<Value> nameValue;
-                Local<Value> messageValue;
-                bool hasName = obj->Get(context, STRING_NEW(isolate, "name")).ToLocal(&nameValue) && nameValue->IsString();
-                bool hasMessage = obj->Get(context, STRING_NEW(isolate, "message")).ToLocal(&messageValue) && messageValue->IsString();
-                if (hasName || hasMessage) {
-                    std::string nameStr = hasName ? *String::Utf8Value(isolate, nameValue) : "";
-                    std::string msgStr = hasMessage ? *String::Utf8Value(isolate, messageValue) : "";
-                    if (!nameStr.empty()) {
-                        header.append(nameStr);
-                        if (!msgStr.empty()) {
-                            header.append(": ");
-                        }
-                    }
-                    header.append(msgStr);
-                }
-
-                if (!header.empty()) {
-                    // Combine header and stack
-                    std::string combined = header;
-                    combined.append("\n");
-                    combined.append(*String::Utf8Value(isolate, stackValue));
-                    exceptionString = v8::String::NewFromUtf8(isolate, combined.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
-                } else {
-                    exceptionString = stackValue.As<String>();
-                }
-            }
-
-            // If no stack or header found, try JSON.stringify for objects
-            if (exceptionString.IsEmpty()) {
-                TryCatch stringifyTry(isolate);
-                MaybeLocal<String> maybeJson = v8::JSON::Stringify(context, obj);
-                if (!maybeJson.IsEmpty()) {
-                    exceptionString = maybeJson.ToLocalChecked();
-                }
-            }
-        }
-
-        // Fallback to toString() if we still don't have anything usable
-        if (exceptionString.IsEmpty()) {
-            TryCatch tryCatch(isolate);
-            MaybeLocal<String> maybeString = exception->ToString(context);
-            if (maybeString.IsEmpty()) {
-                exceptionString = STRING_NEW(isolate, "Unhandled promise rejection.");
-            } else {
-                exceptionString = maybeString.ToLocalChecked();
-            }
-        }
-
-		// If we still don't have a proper stack (e.g. rejection with a plain string),
-		// append a best-effort V8-generated stack trace for better diagnostics.
-		if (!exceptionString.IsEmpty()) {
-			// Heuristic: If the string doesn't already contain a newline typical of stack frames,
-			// we append a generated stack to aid debugging.
-			String::Utf8Value utf8Reason(isolate, exceptionString);
-			bool looksLikeStack = strstr(*utf8Reason, "\n    at ") != nullptr || strstr(*utf8Reason, "\n    at") != nullptr;
-			if (!looksLikeStack) {
-				Local<StackTrace> st = StackTrace::CurrentStackTrace(isolate, 16, StackTrace::kOverview);
-				if (!st.IsEmpty() && st->GetFrameCount() > 0) {
-					// Format stack frames
-					std::string formatted = std::string(*utf8Reason);
-					formatted.append("\n---- Generated stack ----");
-					for (int i = 0; i < st->GetFrameCount(); i++) {
-						Local<StackFrame> frame = st->GetFrame(isolate, i);
-						String::Utf8Value fn(isolate, frame->GetFunctionName());
-						String::Utf8Value sn(isolate, frame->GetScriptNameOrSourceURL());
-						int line = frame->GetLineNumber();
-						int col = frame->GetColumn();
-						formatted.append("\n    at ");
-						formatted.append((*fn && fn.length() > 0) ? *fn : "<anonymous>");
-						formatted.append(" (");
-						formatted.append((*sn && sn.length() > 0) ? *sn : "<unknown>");
-						formatted.append(":");
-						formatted.append(std::to_string(line));
-						formatted.append(":");
-						formatted.append(std::to_string(col));
-						formatted.append(")");
+		// Prefer a real stack if present
+		Local<Value> stackValue;
+		MaybeLocal<Value> maybeStack = obj->Get(context, STRING_NEW(isolate, "stack"));
+		if (maybeStack.ToLocal(&stackValue) && stackValue->IsString()) {
+			// Try to prepend name and message if available
+			Local<Value> nameValue;
+			Local<Value> messageValue;
+			bool hasName = obj->Get(context, STRING_NEW(isolate, "name")).ToLocal(&nameValue) && nameValue->IsString();
+			bool hasMessage = obj->Get(context, STRING_NEW(isolate, "message")).ToLocal(&messageValue) && messageValue->IsString();
+			if (hasName || hasMessage) {
+				std::string nameStr = hasName ? *String::Utf8Value(isolate, nameValue) : "";
+				std::string msgStr = hasMessage ? *String::Utf8Value(isolate, messageValue) : "";
+				if (!nameStr.empty()) {
+					header.append(nameStr);
+					if (!msgStr.empty()) {
+						header.append(": ");
 					}
-					exceptionString = v8::String::NewFromUtf8(isolate, formatted.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
 				}
+				header.append(msgStr);
+			}
+
+			if (!header.empty()) {
+				std::string combined = header;
+				combined.append("\n");
+				combined.append(*String::Utf8Value(isolate, stackValue));
+				exceptionString = v8::String::NewFromUtf8(isolate, combined.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
+			} else {
+				exceptionString = stackValue.As<String>();
 			}
 		}
 
-        JNIEnv* env = JNIScope::getEnv();
-		if (env) {
-			jstring error = env->NewStringUTF(*String::Utf8Value(isolate, exceptionString));
-			env->CallStaticVoidMethod(JNIUtil::v8RuntimeClass, JNIUtil::v8RuntimeFireUnhandledRejectionMethod, error);
-			env->DeleteLocalRef(error);
+		// If no stack or header found, try JSON.stringify for objects
+		if (exceptionString.IsEmpty()) {
+			TryCatch stringifyTry(isolate);
+			MaybeLocal<String> maybeJson = v8::JSON::Stringify(context, obj);
+			if (!maybeJson.IsEmpty()) {
+				exceptionString = maybeJson.ToLocalChecked();
+			}
 		}
 	}
+
+	// Fallback to toString() if we still don't have anything usable
+	if (exceptionString.IsEmpty()) {
+		TryCatch tryCatch(isolate);
+		MaybeLocal<String> maybeString = exception->ToString(context);
+		if (maybeString.IsEmpty()) {
+			exceptionString = STRING_NEW(isolate, "Unhandled promise rejection.");
+		} else {
+			exceptionString = maybeString.ToLocalChecked();
+		}
+	}
+
+	std::string reason = *String::Utf8Value(isolate, exceptionString);
+
+	// If we still don't have a proper stack (e.g. rejection with a plain string),
+	// append a best-effort V8-generated stack trace for better diagnostics.
+	bool looksLikeStack = reason.find("\n    at") != std::string::npos;
+	if (!looksLikeStack) {
+		Local<StackTrace> st = StackTrace::CurrentStackTrace(isolate, 16, StackTrace::kOverview);
+		if (!st.IsEmpty() && st->GetFrameCount() > 0) {
+			reason.append("\n---- Generated stack ----");
+			for (int i = 0; i < st->GetFrameCount(); i++) {
+				Local<StackFrame> frame = st->GetFrame(isolate, i);
+				String::Utf8Value fn(isolate, frame->GetFunctionName());
+				String::Utf8Value sn(isolate, frame->GetScriptNameOrSourceURL());
+				reason.append("\n    at ");
+				reason.append((*fn && fn.length() > 0) ? *fn : "<anonymous>");
+				reason.append(" (");
+				reason.append((*sn && sn.length() > 0) ? *sn : "<unknown>");
+				reason.append(":");
+				reason.append(std::to_string(frame->GetLineNumber()));
+				reason.append(":");
+				reason.append(std::to_string(frame->GetColumn()));
+				reason.append(")");
+			}
+		}
+	}
+
+	return reason;
+}
+
+struct PendingRejection
+{
+	Global<Promise> promise;
+	// Formatted at reject time: the generated stack is only meaningful while the rejecting code is on the stack.
+	std::string reason;
+};
+
+// V8 reports a rejection the moment a promise rejects without a handler, which includes an async function
+// throwing before its first `await`, before its caller's `await` attaches one. So, like Node, a rejection
+// only counts as unhandled if no handler was attached by the time the microtask queue has drained.
+static std::list<PendingRejection> pendingRejections;
+
+void promiseRejectCallback(PromiseRejectMessage message)
+{
+	Isolate* isolate = V8Runtime::v8_isolate;
+	HandleScope scope(isolate);
+	Local<Promise> promise = message.GetPromise();
+
+	switch (message.GetEvent()) {
+		case kPromiseRejectWithNoHandler:
+			pendingRejections.push_back({ Global<Promise>(isolate, promise), formatRejectionReason(isolate, isolate->GetCurrentContext(), message.GetValue()) });
+			break;
+		case kPromiseHandlerAddedAfterReject:
+			pendingRejections.remove_if([&promise](const PendingRejection& pending) { return pending.promise == promise; });
+			break;
+		default:
+			break;
+	}
+}
+
+// Called by V8 when a call returns to depth zero, after it has run the microtask checkpoint.
+static void fireUnhandledRejections(Isolate* isolate)
+{
+	if (pendingRejections.empty()) {
+		return;
+	}
+
+	JNIEnv* env = JNIScope::getEnv();
+	for (const PendingRejection& pending : pendingRejections) {
+		jstring error = env->NewStringUTF(pending.reason.c_str());
+		env->CallStaticVoidMethod(JNIUtil::v8RuntimeClass, JNIUtil::v8RuntimeFireUnhandledRejectionMethod, error);
+		env->DeleteLocalRef(error);
+	}
+	pendingRejections.clear();
 }
 
 } // namespace titanium
@@ -337,6 +360,7 @@ JNIEXPORT void JNICALL Java_org_appcelerator_kroll_runtime_v8_V8Runtime_nativeIn
 		// isolate->SetFatalErrorHandler(OnFatalError);
 		isolate->SetCaptureStackTraceForUncaughtExceptions(true, 10, v8::StackTrace::kOverview);
 		isolate->SetPromiseRejectCallback(promiseRejectCallback);
+		isolate->AddCallCompletedCallback(fireUnhandledRejections);
 	} else {
 		isolate = V8Runtime::v8_isolate;
 		isolate->Enter();
@@ -578,6 +602,7 @@ JNIEXPORT void JNICALL Java_org_appcelerator_kroll_runtime_v8_V8Runtime_nativeDi
 	V8Util::dispose();
 	ProxyFactory::dispose();
 
+	pendingRejections.clear();
 	V8Runtime::moduleObject.Reset();
 	V8Runtime::runModuleFunction.Reset();
 	V8Runtime::krollGlobalObject.Reset();
